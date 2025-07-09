@@ -1,0 +1,231 @@
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import { Separator } from "../ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { 
+  MousePointer, 
+  Plus, 
+  Link, 
+  Grid3X3, 
+  Download, 
+  Upload, 
+  Undo, 
+  Redo,
+  Trash2,
+  Eye,
+  EyeOff
+} from "lucide-react";
+import { useAetherStore } from "../../stores/useAetherStore";
+
+export function Toolbar() {
+  const {
+    connectionMode,
+    toggleConnectionMode,
+    showGrid,
+    toggleGrid,
+    snapToGrid,
+    toggleSnap,
+    selectedNodes,
+    deleteNodes,
+    addNode,
+    undo,
+    redo,
+    history,
+    historyIndex,
+    exportProject,
+    addNotification
+  } = useAetherStore();
+
+  const handleAddNode = () => {
+    const id = addNode();
+    addNotification('Node created', 'success');
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedNodes.length > 0) {
+      deleteNodes(selectedNodes);
+      addNotification(`Deleted ${selectedNodes.length} node(s)`, 'success');
+    }
+  };
+
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        // Import functionality would be implemented here
+        addNotification('Import started', 'info');
+      }
+    };
+    input.click();
+  };
+
+  return (
+    <TooltipProvider>
+      <Card className="absolute top-4 left-4 p-2 bg-gray-800/90 backdrop-blur-sm border-gray-700">
+        <div className="flex items-center gap-2">
+          {/* Selection Mode */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={!connectionMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => connectionMode && toggleConnectionMode()}
+              >
+                <MousePointer className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Selection Mode (ESC)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Add Node */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="sm" onClick={handleAddNode}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Add Node (N)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Connection Mode */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={connectionMode ? "default" : "outline"}
+                size="sm"
+                onClick={toggleConnectionMode}
+              >
+                <Link className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Connection Mode (C)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Grid Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={showGrid ? "default" : "outline"}
+                size="sm"
+                onClick={toggleGrid}
+              >
+                {showGrid ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Toggle Grid (G)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Snap to Grid */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={snapToGrid ? "default" : "outline"}
+                size="sm"
+                onClick={toggleSnap}
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Snap to Grid (Shift+G)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Undo */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={undo}
+                disabled={historyIndex <= 0}
+              >
+                <Undo className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Undo (Ctrl+Z)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Redo */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={redo}
+                disabled={historyIndex >= history.length - 1}
+              >
+                <Redo className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Redo (Ctrl+Y)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Delete Selected */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeleteSelected}
+                disabled={selectedNodes.length === 0}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Delete Selected (Del)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Export */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="sm" onClick={exportProject}>
+                <Download className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Export Project (Ctrl+S)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Import */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="sm" onClick={handleImport}>
+                <Upload className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Import Project (Ctrl+O)</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </Card>
+    </TooltipProvider>
+  );
+}
