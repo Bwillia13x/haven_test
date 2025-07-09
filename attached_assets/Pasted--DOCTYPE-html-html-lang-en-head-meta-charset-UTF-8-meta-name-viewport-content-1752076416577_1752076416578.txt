@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether Weaver v2.0 - Advanced 3D Modeling Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.156.1/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@react-three/fiber@8.15.11/dist/index.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@react-three/drei@9.88.13/dist/index.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/zustand@4.4.1/index.umd.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; }
+        .selection-box { position: absolute; border: 2px dashed #00aaff; background: rgba(0, 170, 255, 0.1); pointer-events: none; }
+        .property-panel { backdrop-filter: blur(10px); }
+        .toolbar-button { transition: all 0.2s ease; }
+        .toolbar-button:hover { transform: translateY(-1px); }
+        .notification { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        .pulse { animation: pulse 2s infinite; }
+        .glow { box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+        .context-menu { backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo, useCallback } = React;
+        const { Canvas, useFrame, useThree } = ReactThreeFiber;
+        const { OrbitControls, Sphere, Line, Box, Plane, Text } = drei;
+        const { create } = zustand;
+
+        // Enhanced Zustand Store with v2.0 features
+        const useStore = create((set, get) => ({
+            // Core State
+            nodes: [],
+            connectors: [],
+            selectedNodes: [],
+            connectionMode: false,
+            firstNodeForConnection: null,
+            
+            // v2.0 Features
+            history: [],
+            historyIndex: -1,
+            materials: {
+                default: { color: '#00aaff', opacity: 1.0, metalness: 0.3, roughness: 0.4 },
+                selected: { color: '#ff69b4', opacity: 1.0, metalness: 0.1, roughness: 0.2 },
+                connecting: { color: '#00ff00', opacity: 0.8, metalness: 0.2, roughness: 0.3 }
+            },
+            showGrid: true,
+            snapToGrid: false,
+            gridSize: 1,
+            animationSpeed: 1,
+            notifications: [],
+            contextMenu: null,
+            
+            // Selection System
+            multiSelect: false,
+            selectionBox: null,
+            
+            // File System
+            currentFile: null,
+            projectName: 'Untitled Project',
+            
+            // Save state to history
+            saveToHistory: () => {
+                const state = get();
+                const snapshot = {
+                    nodes: JSON.parse(JSON.stringify(state.nodes)),
+                    connectors: JSON.parse(JSON.stringify(state.connectors)),
+                    timestamp: Date.now()
+                };
+                
+                const newHistory = state.history.slice(0, state.historyIndex + 1);
+                newHistory.push(snapshot);
+                
+                set({
+                    history: newHistory.slice(-50), // Keep last 50 states
+                    historyIndex: newHistory.length - 1
+                });
+            },
+            
+            // Undo/Redo
+            undo: () => {
+                const state = get();
+                if (state.historyIndex > 0) {
+                    const prevState = state.history[state.historyIndex - 1];
+                    set({
+                        nodes: prevState.nodes,
+                        connectors: prevState.connectors,
+                        historyIndex: state.historyIndex - 1,
+                        selectedNodes: []
+                    });
+                }
+            },
+            
+            redo: () => {
+                const state = get();
+                if (state.historyIndex < state.history.length - 1) {
+                    const nextState = state.history[state.historyIndex + 1];
+                    set({
+                        nodes: nextState.nodes,
+                        connectors: nextState.connectors,
+                        historyIndex: state.historyIndex + 1,
+                        selectedNodes: []
+                    });
+                }
+            },
+            
+            // Enhanced Node Operations
+            addNode: (position, material = 'default', animated = true) => {
+                get().saveToHistory();
+                const id = `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const newNode = {
+                    id,
+                    position: position || [
+                        (Math.random() - 0.5) * 8,
+                        (Math.random() - 0.5) * 8,
+                        (Math.random() - 0.5) * 8
+                    ],
+                    material: material,
+                    scale: animated ? 0.1 : 1,
+                    created: Date.now()
+                };
+                
+                set(state => ({ nodes: [...state.nodes, newNode] }));
+                
+                if (animated) {
+                    // Animate node scale
+                    const animateScale = () => {
+                        const state = get();
+                        const node = state.nodes.find(n => n.id === id);
+                        if (node && node.scale < 1) {
+                            get().setNodeScale(id, Math.min(1, node.scale + 0.05));
+                            requestAnimationFrame(animateScale);
+                        }
+                    };
+                    requestAnimationFrame(animateScale);
+                }
+                
+                return id;
+            },
+            
+            setNodePosition: (id, position) => {
+                set(state => ({
+                    nodes: state.nodes.map(node =>
+                        node.id === id ? { ...node, position: [...position] } : node
+                    )
+                }));
+            },
+            
+            setNodeScale: (id, scale) => {
+                set(state => ({
+                    nodes: state.nodes.map(node =>
+                        node.id === id ? { ...node, scale } : node
+                    )
+                }));
+            },
+            
+            setNodeMaterial: (id, material) => {
+                set(state => ({
+                    nodes: state.nodes.map(node =>
+                        node.id === id ? { ...node, material } : node
+                    )
+                }));
+            },
+            
+            deleteNodes: (nodeIds) => {
+                get().saveToHistory();
+                set(state => ({
+                    nodes: state.nodes.filter(node => !nodeIds.includes(node.id)),
+                    connectors: state.connectors.filter(conn => 
+                        !nodeIds.includes(conn.startNodeId) && !nodeIds.includes(conn.endNodeId)
+                    ),
+                    selectedNodes: []
+                }));
+            },
+            
+            // Enhanced Selection System
+            selectNode: (id, multiSelect = false) => {
+                const state = get();
+                
+                if (state.connectionMode) {
+                    if (!state.firstNodeForConnection) {
+                        set({ firstNodeForConnection: id });
+                    } else if (state.firstNodeForConnection !== id) {
+                        get().addConnector(state.firstNodeForConnection, id);
+                        set({ firstNodeForConnection: null, connectionMode: false });
+                    }
+                } else {
+                    if (multiSelect) {
+                        const isSelected = state.selectedNodes.includes(id);
+                        set({
+                            selectedNodes: isSelected 
+                                ? state.selectedNodes.filter(nodeId => nodeId !== id)
+                                : [...state.selectedNodes, id]
+                        });
+                    } else {
+                        set({ selectedNodes: [id] });
+                    }
+                }
+            },
+            
+            selectNodes: (nodeIds) => {
+                set({ selectedNodes: nodeIds });
+            },
+            
+            clearSelection: () => {
+                set({ selectedNodes: [], selectionBox: null });
+            },
+            
+            // Enhanced Connector Operations
+            addConnector: (startNodeId, endNodeId) => {
+                const state = get();
+                const connectorId = `conn_${startNodeId}_${endNodeId}`;
+                
+                const exists = state.connectors.some(c =>
+                    (c.startNodeId === startNodeId && c.endNodeId === endNodeId) ||
+                    (c.startNodeId === endNodeId && c.endNodeId === startNodeId)
+                );
+                
+                if (!exists) {
+                    set(state => ({
+                        connectors: [...state.connectors, {
+                            id: connectorId,
+                            startNodeId,
+                            endNodeId,
+                            material: 'default',
+                            thickness: 1
+                        }]
+                    }));
+                }
+            },
+            
+            setConnectorMaterial: (id, material) => {
+                set(state => ({
+                    connectors: state.connectors.map(conn =>
+                        conn.id === id ? { ...conn, material } : conn
+                    )
+                }));
+            },
+            
+            // Mode Management
+            toggleConnectionMode: () => {
+                set(state => ({
+                    connectionMode: !state.connectionMode,
+                    selectedNodes: [],
+                    firstNodeForConnection: null
+                }));
+            },
+            
+            setMultiSelect: (enabled) => {
+                set({ multiSelect: enabled });
+            },
+            
+            // Grid and Snap
+            toggleGrid: () => {
+                set(state => ({ showGrid: !state.showGrid }));
+            },
+            
+            toggleSnap: () => {
+                set(state => ({ snapToGrid: !state.snapToGrid }));
+            },
+            
+            setGridSize: (size) => {
+                set({ gridSize: size });
+            },
+            
+            snapPosition: (position) => {
+                const state = get();
+                if (!state.snapToGrid) return position;
+                
+                const gridSize = state.gridSize;
+                return [
+                    Math.round(position[0] / gridSize) * gridSize,
+                    Math.round(position[1] / gridSize) * gridSize,
+                    Math.round(position[2] / gridSize) * gridSize
+                ];
+            },
+            
+            // Notifications
+            addNotification: (message, type = 'info') => {
+                const notification = {
+                    id: Date.now(),
+                    message,
+                    type,
+                    timestamp: Date.now()
+                };
+                
+                set(state => ({
+                    notifications: [...state.notifications, notification]
+                }));
+                
+                setTimeout(() => {
+                    set(state => ({
+                        notifications: state.notifications.filter(n => n.id !== notification.id)
+                    }));
+                }, 5000);
+            },
+            
+            // Context Menu
+            showContextMenu: (position, items) => {
+                set({ contextMenu: { position, items } });
+            },
+            
+            hideContextMenu: () => {
+                set({ contextMenu: null });
+            },
+            
+            // File Operations
+            exportProject: () => {
+                const state = get();
+                const data = {
+                    name: state.projectName,
+                    version: '2.0',
+                    nodes: state.nodes,
+                    connectors: state.connectors,
+                    materials: state.materials,
+                    settings: {
+                        gridSize: state.gridSize,
+                        showGrid: state.showGrid,
+                        snapToGrid: state.snapToGrid
+                    },
+                    exported: new Date().toISOString()
+                };
+                
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${state.projectName}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                get().addNotification('Project exported successfully', 'success');
+            },
+            
+            importProject: (file) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        get().saveToHistory();
+                        
+                        set({
+                            nodes: data.nodes || [],
+                            connectors: data.connectors || [],
+                            materials: { ...get().materials, ...(data.materials || {}) },
+                            projectName: data.name || 'Imported Project',
+                            gridSize: data.settings?.gridSize || 1,
+                            showGrid: data.settings?.showGrid !== false,
+                            snapToGrid: data.settings?.snapToGrid || false,
+                            selectedNodes: []
+                        });
+                        
+                        get().addNotification('Project imported successfully', 'success');
+                    } catch (error) {
+                        get().addNotification('Failed to import project', 'error');
+                    }
+                };
+                reader.readAsText(file);
+            },
+            
+            // Advanced AI Commands
+            executeCommand: (commandString) => {
+                const cmd = commandString.trim().toLowerCase();
+                const state = get();
+                
+                try {
+                    get().saveToHistory();
+                    
+                    // Clear command
+                    if (cmd === 'clear') {
+                        set({ nodes: [], connectors: [], selectedNodes: [] });
+                        get().addNotification('Scene cleared', 'success');
+                        return;
+                    }
+                    
+                    // Create single node
+                    if (cmd.startsWith('create node at ')) {
+                        const coords = cmd.substring(15).split(',').map(x => parseFloat(x.trim()));
+                        if (coords.length === 3 && coords.every(x => !isNaN(x))) {
+                            get().addNode(coords);
+                            get().addNotification(`Node created at (${coords.join(', ')})`, 'success');
+                        } else {
+                            get().addNotification('Invalid coordinates', 'error');
+                        }
+                        return;
+                    }
+                    
+                    // Create cube
+                    if (cmd.startsWith('create cube size ')) {
+                        const match = cmd.match(/create cube size (\d+)\s*(?:spacing\s+(\d+(?:\.\d+)?))?/);
+                        if (match) {
+                            const size = parseInt(match[1]);
+                            const spacing = parseFloat(match[2] || '2');
+                            
+                            const nodes = [];
+                            for (let x = 0; x < size; x++) {
+                                for (let y = 0; y < size; y++) {
+                                    for (let z = 0; z < size; z++) {
+                                        const position = [
+                                            (x - (size - 1) / 2) * spacing,
+                                            (y - (size - 1) / 2) * spacing,
+                                            (z - (size - 1) / 2) * spacing
+                                        ];
+                                        nodes.push(get().addNode(position, 'default', false));
+                                    }
+                                }
+                            }
+                            
+                            // Connect adjacent nodes
+                            const currentNodes = get().nodes;
+                            nodes.forEach(nodeId => {
+                                const node = currentNodes.find(n => n.id === nodeId);
+                                if (!node) return;
+                                
+                                nodes.forEach(otherNodeId => {
+                                    if (nodeId === otherNodeId) return;
+                                    const otherNode = currentNodes.find(n => n.id === otherNodeId);
+                                    if (!otherNode) return;
+                                    
+                                    const distance = Math.sqrt(
+                                        Math.pow(node.position[0] - otherNode.position[0], 2) +
+                                        Math.pow(node.position[1] - otherNode.position[1], 2) +
+                                        Math.pow(node.position[2] - otherNode.position[2], 2)
+                                    );
+                                    
+                                    if (distance <= spacing * 1.1) {
+                                        get().addConnector(nodeId, otherNodeId);
+                                    }
+                                });
+                            });
+                            
+                            get().addNotification(`Created ${size}×${size}×${size} cube`, 'success');
+                        }
+                        return;
+                    }
+                    
+                    // Create sphere
+                    if (cmd.startsWith('create sphere radius ')) {
+                        const match = cmd.match(/create sphere radius (\d+(?:\.\d+)?)\s*segments\s+(\d+)/);
+                        if (match) {
+                            const radius = parseFloat(match[1]);
+                            const segments = parseInt(match[2]);
+                            
+                            for (let i = 0; i < segments; i++) {
+                                const theta = (i / segments) * Math.PI * 2;
+                                const phi = Math.acos(1 - 2 * Math.random());
+                                
+                                const x = radius * Math.sin(phi) * Math.cos(theta);
+                                const y = radius * Math.sin(phi) * Math.sin(theta);
+                                const z = radius * Math.cos(phi);
+                                
+                                get().addNode([x, y, z], 'default', false);
+                            }
+                            
+                            get().addNotification(`Created sphere with ${segments} nodes`, 'success');
+                        }
+                        return;
+                    }
+                    
+                    // Connect all within distance
+                    if (cmd.startsWith('connect all distance ')) {
+                        const distance = parseFloat(cmd.substring(21));
+                        if (!isNaN(distance)) {
+                            const nodes = get().nodes;
+                            let connections = 0;
+                            
+                            nodes.forEach(nodeA => {
+                                nodes.forEach(nodeB => {
+                                    if (nodeA.id === nodeB.id) return;
+                                    
+                                    const dist = Math.sqrt(
+                                        Math.pow(nodeA.position[0] - nodeB.position[0], 2) +
+                                        Math.pow(nodeA.position[1] - nodeB.position[1], 2) +
+                                        Math.pow(nodeA.position[2] - nodeB.position[2], 2)
+                                    );
+                                    
+                                    if (dist <= distance) {
+                                        get().addConnector(nodeA.id, nodeB.id);
+                                        connections++;
+                                    }
+                                });
+                            });
+                            
+                            get().addNotification(`Created ${connections} connections`, 'success');
+                        }
+                        return;
+                    }
+                    
+                    // Advanced v2.0 commands
+                    
+                    // Create spiral
+                    if (cmd.startsWith('create spiral turns ')) {
+                        const match = cmd.match(/create spiral turns (\d+)\s*radius\s+(\d+(?:\.\d+)?)\s*height\s+(\d+(?:\.\d+)?)\s*(?:segments\s+(\d+))?/);
+                        if (match) {
+                            const turns = parseInt(match[1]);
+                            const radius = parseFloat(match[2]);
+                            const height = parseFloat(match[3]);
+                            const segments = parseInt(match[4] || '50');
+                            
+                            const nodes = [];
+                            for (let i = 0; i < segments; i++) {
+                                const t = i / segments;
+                                const angle = t * turns * Math.PI * 2;
+                                const x = radius * Math.cos(angle);
+                                const y = (t - 0.5) * height;
+                                const z = radius * Math.sin(angle);
+                                
+                                const nodeId = get().addNode([x, y, z], 'default', false);
+                                nodes.push(nodeId);
+                                
+                                if (i > 0) {
+                                    get().addConnector(nodes[i-1], nodeId);
+                                }
+                            }
+                            
+                            get().addNotification(`Created spiral with ${segments} nodes`, 'success');
+                        }
+                        return;
+                    }
+                    
+                    // Create fractal tree
+                    if (cmd.startsWith('create tree depth ')) {
+                        const match = cmd.match(/create tree depth (\d+)\s*(?:branches\s+(\d+))?/);
+                        if (match) {
+                            const depth = parseInt(match[1]);
+                            const branches = parseInt(match[2] || '3');
+                            
+                            const createBranch = (startPos, direction, length, currentDepth) => {
+                                if (currentDepth >= depth) return;
+                                
+                                const endPos = [
+                                    startPos[0] + direction[0] * length,
+                                    startPos[1] + direction[1] * length,
+                                    startPos[2] + direction[2] * length
+                                ];
+                                
+                                const startNode = get().addNode(startPos, 'default', false);
+                                const endNode = get().addNode(endPos, 'default', false);
+                                get().addConnector(startNode, endNode);
+                                
+                                for (let i = 0; i < branches; i++) {
+                                    const angle = (i / branches) * Math.PI * 2;
+                                    const newDirection = [
+                                        direction[0] * 0.7 + Math.cos(angle) * 0.3,
+                                        direction[1] * 0.7 + Math.sin(angle) * 0.3,
+                                        direction[2] * 0.7
+                                    ];
+                                    
+                                    createBranch(endPos, newDirection, length * 0.7, currentDepth + 1);
+                                }
+                            };
+                            
+                            createBranch([0, -3, 0], [0, 1, 0], 2, 0);
+                            get().addNotification(`Created fractal tree (depth: ${depth})`, 'success');
+                        }
+                        return;
+                    }
+                    
+                    // Select all nodes
+                    if (cmd === 'select all') {
+                        const allNodeIds = get().nodes.map(n => n.id);
+                        get().selectNodes(allNodeIds);
+                        get().addNotification(`Selected ${allNodeIds.length} nodes`, 'success');
+                        return;
+                    }
+                    
+                    // Delete selected nodes
+                    if (cmd === 'delete selected') {
+                        const selectedNodes = get().selectedNodes;
+                        if (selectedNodes.length > 0) {
+                            get().deleteNodes(selectedNodes);
+                            get().addNotification(`Deleted ${selectedNodes.length} nodes`, 'success');
+                        } else {
+                            get().addNotification('No nodes selected', 'warning');
+                        }
+                        return;
+                    }
+                    
+                    // Unknown command
+                    get().addNotification('Unknown command', 'error');
+                    
+                } catch (error) {
+                    get().addNotification('Command execution failed', 'error');
+                }
+            }
+        }));
+
+        // Enhanced Node Component with v2.0 features
+        function Node({ id, position, material = 'default', scale = 1 }) {
+            const { selectedNodes, selectNode, setNodePosition, snapPosition, materials, multiSelect } = useStore();
+            const ref = useRef();
+            const [isDragging, setIsDragging] = useState(false);
+            const [dragOffset, setDragOffset] = useState([0, 0, 0]);
+            
+            const isSelected = selectedNodes.includes(id);
+            const materialProps = materials[isSelected ? 'selected' : material];
+            
+            const handlePointerDown = useCallback((e) => {
+                e.stopPropagation();
+                setIsDragging(true);
+                const worldPos = e.point;
+                setDragOffset([
+                    worldPos.x - position[0],
+                    worldPos.y - position[1],
+                    worldPos.z - position[2]
+                ]);
+                
+                selectNode(id, multiSelect || e.ctrlKey || e.metaKey);
+            }, [id, position, selectNode, multiSelect]);
+            
+            const handlePointerMove = useCallback((e) => {
+                if (!isDragging) return;
+                
+                const worldPos = e.point;
+                const newPosition = [
+                    worldPos.x - dragOffset[0],
+                    worldPos.y - dragOffset[1],
+                    worldPos.z - dragOffset[2]
+                ];
+                
+                setNodePosition(id, snapPosition(newPosition));
+            }, [isDragging, dragOffset, id, setNodePosition, snapPosition]);
+            
+            const handlePointerUp = useCallback(() => {
+                setIsDragging(false);
+            }, []);
+            
+            useEffect(() => {
+                if (isDragging) {
+                    document.addEventListener('pointermove', handlePointerMove);
+                    document.addEventListener('pointerup', handlePointerUp);
+                    return () => {
+                        document.removeEventListener('pointermove', handlePointerMove);
+                        document.removeEventListener('pointerup', handlePointerUp);
+                    };
+                }
+            }, [isDragging, handlePointerMove, handlePointerUp]);
+            
+            return (
+                <Sphere
+                    ref={ref}
+                    args={[0.15 * scale, 16, 16]}
+                    position={position}
+                    onPointerDown={handlePointerDown}
+                    scale={[scale, scale, scale]}
+                >
+                    <meshStandardMaterial
+                        color={materialProps.color}
+                        transparent={materialProps.opacity < 1}
+                        opacity={materialProps.opacity}
+                        metalness={materialProps.metalness}
+                        roughness={materialProps.roughness}
+                    />
+                </Sphere>
+            );
+        }
+
+        // Enhanced Connector Component
+        function Connector({ startNodeId, endNodeId, material = 'default', thickness = 1 }) {
+            const nodes = useStore(state => state.nodes);
+            const materials = useStore(state => state.materials);
+            
+            const startNode = nodes.find(n => n.id === startNodeId);
+            const endNode = nodes.find(n => n.id === endNodeId);
+            
+            if (!startNode || !endNode) return null;
+            
+            const startVec = new THREE.Vector3(...startNode.position);
+            const endVec = new THREE.Vector3(...endNode.position);
+            const materialProps = materials[material];
+            
+            return (
+                <Line
+                    points={[startVec, endVec]}
+                    color={materialProps.color}
+                    lineWidth={thickness}
+                />
+            );
+        }
+
+        // Grid Component
+        function Grid() {
+            const { showGrid, gridSize } = useStore();
+            
+            if (!showGrid) return null;
+            
+            const gridHelper = useMemo(() => {
+                return new THREE.GridHelper(20, 20 / gridSize, 0x444444, 0x222222);
+            }, [gridSize]);
+            
+            return <primitive object={gridHelper} />;
+        }
+
+        // Selection Box Component
+        function SelectionBox() {
+            const { selectionBox } = useStore();
+            
+            if (!selectionBox) return null;
+            
+            return (
+                <div 
+                    className="selection-box"
+                    style={{
+                        left: Math.min(selectionBox.start.x, selectionBox.end.x),
+                        top: Math.min(selectionBox.start.y, selectionBox.end.y),
+                        width: Math.abs(selectionBox.end.x - selectionBox.start.x),
+                        height: Math.abs(selectionBox.end.y - selectionBox.start.y)
+                    }}
+                />
+            );
+        }
+
+        // Enhanced Canvas Wrapper
+        function CanvasWrapper() {
+            const { nodes, connectors, clearSelection, selectNodes, materials } = useStore();
+            const [isSelecting, setIsSelecting] = useState(false);
+            const [selectionStart, setSelectionStart] = useState(null);
+            const canvasRef = useRef();
+            
+            const handlePointerDown = useCallback((e) => {
+                if (e.button === 0 && !e.target.closest('mesh')) {
+                    setIsSelecting(true);
+                    setSelectionStart({ x: e.clientX, y: e.clientY });
+                    clearSelection();
+                }
+            }, [clearSelection]);
+            
+            const handlePointerMove = useCallback((e) => {
+                if (!isSelecting || !selectionStart) return;
+                
+                const current = { x: e.clientX, y: e.clientY };
+                useStore.setState({
+                    selectionBox: {
+                        start: selectionStart,
+                        end: current
+                    }
+                });
+            }, [isSelecting, selectionStart]);
+            
+            const handlePointerUp = useCallback(() => {
+                if (isSelecting) {
+                    setIsSelecting(false);
+                    setSelectionStart(null);
+                    useStore.setState({ selectionBox: null });
+                }
+            }, [isSelecting]);
+            
+            useEffect(() => {
+                if (isSelecting) {
+                    document.addEventListener('pointermove', handlePointerMove);
+                    document.addEventListener('pointerup', handlePointerUp);
+                    return () => {
+                        document.removeEventListener('pointermove', handlePointerMove);
+                        document.removeEventListener('pointerup', handlePointerUp);
+                    };
+                }
+            }, [isSelecting, handlePointerMove, handlePointerUp]);
+            
+            return (
+                <div className="relative w-full h-full" onPointerDown={handlePointerDown}>
+                    <Canvas
+                        ref={canvasRef}
+                        camera={{ position: [0, 0, 10], fov: 50 }}
+                        style={{ background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%)' }}
+                    >
+                        <ambientLight intensity={0.4} />
+                        <directionalLight position={[5, 5, 5]} intensity={0.8} />
+                        <pointLight position={[-5, -5, -5]} intensity={0.3} color="#4a90e2" />
+                        
+                        <Grid />
+                        
+                        {nodes.map(node => (
+                            <Node key={node.id} {...node} />
+                        ))}
+                        
+                        {connectors.map(conn => (
+                            <Connector key={conn.id} {...conn} />
+                        ))}
+                        
+                        <OrbitControls makeDefault />
+                    </Canvas>
+                    
+                    <SelectionBox />
+                </div>
+            );
+        }
+
+        // Enhanced Toolbar
+        function Toolbar() {
+            const {
+                addNode, deleteNodes, toggleConnectionMode, connectionMode, selectedNodes,
+                undo, redo, history, historyIndex, toggleGrid, showGrid, toggleSnap, snapToGrid,
+                exportProject, multiSelect, setMultiSelect
+            } = useStore();
+            
+            const canUndo = historyIndex > 0;
+            const canRedo = historyIndex < history.length - 1;
+            const canDelete = selectedNodes.length > 0;
+            
+            const handleFileImport = useCallback((e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    useStore.getState().importProject(file);
+                }
+            }, []);
+            
+            return (
+                <div className="absolute top-4 left-4 z-10 bg-black bg-opacity-50 backdrop-blur-md rounded-lg p-2">
+                    <div className="flex flex-wrap gap-2">
+                        {/* File Operations */}
+                        <div className="flex gap-1 border-r border-gray-600 pr-2">
+                            <button
+                                onClick={exportProject}
+                                className="toolbar-button px-3 py-2 bg-green-600 text-white rounded hover:bg-green-500 transition-colors"
+                                title="Export Project"
+                            >
+                                <i className="fas fa-download"></i>
+                            </button>
+                            
+                            <label className="toolbar-button px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors cursor-pointer" title="Import Project">
+                                <i className="fas fa-upload"></i>
+                                <input
+                                    type="file"
+                                    accept=".json"
+                                    onChange={handleFileImport}
+                                    className="hidden"
+                                />
+                            </label>
+                        </div>
+                        
+                        {/* Edit Operations */}
+                        <div className="flex gap-1 border-r border-gray-600 pr-2">
+                            <button
+                                onClick={undo}
+                                disabled={!canUndo}
+                                className={`toolbar-button px-3 py-2 rounded transition-colors ${
+                                    canUndo ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                                }`}
+                                title="Undo"
+                            >
+                                <i className="fas fa-undo"></i>
+                            </button>
+                            
+                            <button
+                                onClick={redo}
+                                disabled={!canRedo}
+                                className={`toolbar-button px-3 py-2 rounded transition-colors ${
+                                    canRedo ? 'bg-gray-600 text-white hover:bg-gray-500' : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                                }`}
+                                title="Redo"
+                            >
+                                <i className="fas fa-redo"></i>
+                            </button>
+                        </div>
+                        
+                        {/* Node Operations */}
+                        <div className="flex gap-1 border-r border-gray-600 pr-2">
+                            <button
+                                onClick={() => addNode()}
+                                className="toolbar-button px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors"
+                                title="Add Node"
+                            >
+                                <i className="fas fa-plus"></i>
+                            </button>
+                            
+                            <button
+                                onClick={() => deleteNodes(selectedNodes)}
+                                disabled={!canDelete}
+                                className={`toolbar-button px-3 py-2 rounded transition-colors ${
+                                    canDelete ? 'bg-red-600 text-white hover:bg-red-500' : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                                }`}
+                                title="Delete Selected"
+                            >
+                                <i className="fas fa-trash"></i>
+                            </button>
+                            
+                            <button
+                                onClick={toggleConnectionMode}
+                                className={`toolbar-button px-3 py-2 rounded transition-colors ${
+                                    connectionMode ? 'bg-green-600 text-white hover:bg-green-500' : 'bg-gray-600 text-white hover:bg-gray-500'
+                                }`}
+                                title="Connect Mode"
+                            >
+                                <i className="fas fa-link"></i>
+                            </button>
+                        </div>
+                        
+                        {/* View Options */}
+                        <div className="flex gap-1 border-r border-gray-600 pr-2">
+                            <button
+                                onClick={toggleGrid}
+                                className={`toolbar-button px-3 py-2 rounded transition-colors ${
+                                    showGrid ? 'bg-yellow-600 text-white hover:bg-yellow-500' : 'bg-gray-600 text-white hover:bg-gray-500'
+                                }`}
+                                title="Toggle Grid"
+                            >
+                                <i className="fas fa-grid-3x3"></i>
+                            </button>
+                            
+                            <button
+                                onClick={toggleSnap}
+                                className={`toolbar-button px-3 py-2 rounded transition-colors ${
+                                    snapToGrid ? 'bg-purple-600 text-white hover:bg-purple-500' : 'bg-gray-600 text-white hover:bg-gray-500'
+                                }`}
+                                title="Snap to Grid"
+                            >
+                                <i className="fas fa-magnet"></i>
+                            </button>
+                        </div>
+                        
+                        {/* Selection Mode */}
+                        <div className="flex gap-1">
+                            <button
+                                onClick={() => setMultiSelect(!multiSelect)}
+                                className={`toolbar-button px-3 py-2 rounded transition-colors ${
+                                    multiSelect ? 'bg-orange-600 text-white hover:bg-orange-500' : 'bg-gray-600 text-white hover:bg-gray-500'
+                                }`}
+                                title="Multi-Select Mode"
+                            >
+                                <i className="fas fa-mouse-pointer"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Properties Panel
+        function PropertiesPanel() {
+            const { selectedNodes, nodes, materials, setNodeMaterial } = useStore();
+            const [isVisible, setIsVisible] = useState(false);
+            
+            if (selectedNodes.length === 0) return null;
+            
+            const selectedNodeData = nodes.filter(n => selectedNodes.includes(n.id));
+            
+            return (
+                <div className="absolute top-4 right-4 z-10 bg-black bg-opacity-50 backdrop-blur-md rounded-lg p-4 w-64">
+                    <h3 className="text-white text-lg font-semibold mb-3">Properties</h3>
+                    
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-gray-300 text-sm block mb-1">Selected: {selectedNodes.length} nodes</label>
+                        </div>
+                        
+                        {selectedNodeData.length === 1 && (
+                            <div>
+                                <label className="text-gray-300 text-sm block mb-1">Position:</label>
+                                <div className="text-white text-xs font-mono">
+                                    {selectedNodeData[0].position.map(v => v.toFixed(2)).join(', ')}
+                                </div>
+                            </div>
+                        )}
+                        
+                        <div>
+                            <label className="text-gray-300 text-sm block mb-1">Material:</label>
+                            <select
+                                className="w-full bg-gray-700 text-white px-2 py-1 rounded"
+                                onChange={(e) => {
+                                    selectedNodes.forEach(id => {
+                                        setNodeMaterial(id, e.target.value);
+                                    });
+                                }}
+                            >
+                                <option value="default">Default</option>
+                                <option value="selected">Selected</option>
+                                <option value="connecting">Connecting</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Enhanced AI Prompt Bar
+        function AIPromptBar() {
+            const { executeCommand, addNotification } = useStore();
+            const [input, setInput] = useState('');
+            const [isProcessing, setIsProcessing] = useState(false);
+            
+            const handleSubmit = useCallback(async (e) => {
+                e.preventDefault();
+                if (!input.trim() || isProcessing) return;
+                
+                setIsProcessing(true);
+                try {
+                    await executeCommand(input);
+                    setInput('');
+                } catch (error) {
+                    addNotification('Command failed', 'error');
+                }
+                setIsProcessing(false);
+            }, [input, isProcessing, executeCommand, addNotification]);
+            
+            const suggestions = [
+                'create cube size 3 spacing 2',
+                'create sphere radius 5 segments 50',
+                'create spiral turns 3 radius 4 height 6',
+                'create tree depth 4 branches 3',
+                'connect all distance 3',
+                'select all',
+                'clear'
+            ];
+            
+            return (
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10 w-full max-w-2xl px-4">
+                    <div className="bg-black bg-opacity-50 backdrop-blur-md rounded-lg p-4">
+                        <form onSubmit={handleSubmit} className="flex gap-2 mb-2">
+                            <input
+                                type="text"
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                placeholder="Enter AI command... (e.g., 'create cube size 3', 'create spiral turns 3 radius 4 height 6')"
+                                className="flex-1 px-4 py-2 bg-gray-800 text-white border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                disabled={isProcessing}
+                            />
+                            <button
+                                type="submit"
+                                disabled={isProcessing || !input.trim()}
+                                className={`px-6 py-2 rounded-md transition-colors ${
+                                    isProcessing || !input.trim()
+                                        ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                        : 'bg-blue-600 text-white hover:bg-blue-500'
+                                }`}
+                            >
+                                {isProcessing ? (
+                                    <i className="fas fa-spinner fa-spin"></i>
+                                ) : (
+                                    <i className="fas fa-paper-plane"></i>
+                                )}
+                            </button>
+                        </form>
+                        
+                        <div className="flex flex-wrap gap-2">
+                            {suggestions.map((suggestion, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setInput(suggestion)}
+                                    className="px-3 py-1 bg-gray-700 text-gray-300 text-sm rounded hover:bg-gray-600 transition-colors"
+                                >
+                                    {suggestion}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Notifications System
+        function Notifications() {
+            const { notifications } = useStore();
+            
+            return (
+                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 space-y-2">
+                    {notifications.map(notification => (
+                        <div
+                            key={notification.id}
+                            className={`notification px-4 py-2 rounded-lg backdrop-blur-md ${
+                                notification.type === 'success' ? 'bg-green-500 bg-opacity-80' :
+                                notification.type === 'error' ? 'bg-red-500 bg-opacity-80' :
+                                notification.type === 'warning' ? 'bg-yellow-500 bg-opacity-80' :
+                                'bg-blue-500 bg-opacity-80'
+                            }`}
+                        >
+                            <span className="text-white font-medium">{notification.message}</span>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        // Status Bar
+        function StatusBar() {
+            const { nodes, connectors, selectedNodes, connectionMode, projectName } = useStore();
+            
+            return (
+                <div className="absolute bottom-0 left-0 right-0 z-10 bg-black bg-opacity-50 backdrop-blur-md border-t border-gray-600 px-4 py-2">
+                    <div className="flex justify-between items-center text-sm text-gray-300">
+                        <div className="flex space-x-6">
+                            <span>Project: {projectName}</span>
+                            <span>Nodes: {nodes.length}</span>
+                            <span>Connections: {connectors.length}</span>
+                            <span>Selected: {selectedNodes.length}</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-4">
+                            {connectionMode && (
+                                <span className="text-green-400 pulse">
+                                    <i className="fas fa-link mr-1"></i>
+                                    Connection Mode
+                                </span>
+                            )}
+                            <span>Aether Weaver v2.0</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Context Menu
+        function ContextMenu() {
+            const { contextMenu, hideContextMenu } = useStore();
+            
+            useEffect(() => {
+                const handleClickOutside = () => hideContextMenu();
+                if (contextMenu) {
+                    document.addEventListener('click', handleClickOutside);
+                    return () => document.removeEventListener('click', handleClickOutside);
+                }
+            }, [contextMenu, hideContextMenu]);
+            
+            if (!contextMenu) return null;
+            
+            return (
+                <div
+                    className="context-menu absolute z-30 bg-black bg-opacity-90 rounded-lg py-2 min-w-32"
+                    style={{
+                        left: contextMenu.position.x,
+                        top: contextMenu.position.y
+                    }}
+                >
+                    {contextMenu.items.map((item, i) => (
+                        <button
+                            key={i}
+                            onClick={item.action}
+                            className="w-full text-left px-4 py-2 text-white hover:bg-gray-700 transition-colors"
+                        >
+                            {item.icon && <i className={`${item.icon} mr-2`}></i>}
+                            {item.label}
+                        </button>
+                    ))}
+                </div>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            useEffect(() => {
+                // Initialize first state for undo/redo
+                useStore.getState().saveToHistory();
+                
+                // Keyboard shortcuts
+                const handleKeyDown = (e) => {
+                    if (e.ctrlKey || e.metaKey) {
+                        switch (e.key) {
+                            case 'z':
+                                e.preventDefault();
+                                if (e.shiftKey) {
+                                    useStore.getState().redo();
+                                } else {
+                                    useStore.getState().undo();
+                                }
+                                break;
+                            case 'y':
+                                e.preventDefault();
+                                useStore.getState().redo();
+                                break;
+                            case 'a':
+                                e.preventDefault();
+                                const allNodeIds = useStore.getState().nodes.map(n => n.id);
+                                useStore.getState().selectNodes(allNodeIds);
+                                break;
+                            case 's':
+                                e.preventDefault();
+                                useStore.getState().exportProject();
+                                break;
+                        }
+                    }
+                    
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                        const selectedNodes = useStore.getState().selectedNodes;
+                        if (selectedNodes.length > 0) {
+                            useStore.getState().deleteNodes(selectedNodes);
+                        }
+                    }
+                    
+                    if (e.key === 'Escape') {
+                        useStore.getState().clearSelection();
+                        useStore.getState().hideContextMenu();
+                    }
+                };
+                
+                document.addEventListener('keydown', handleKeyDown);
+                return () => document.removeEventListener('keydown', handleKeyDown);
+            }, []);
+            
+            return (
+                <div className="w-full h-screen bg-gray-900 relative overflow-hidden">
+                    <CanvasWrapper />
+                    <Toolbar />
+                    <PropertiesPanel />
+                    <AIPromptBar />
+                    <Notifications />
+                    <StatusBar />
+                    <ContextMenu />
+                    
+                    {/* Help Panel */}
+                    <div className="absolute top-4 right-4 z-10 max-w-xs">
+                        <details className="bg-black bg-opacity-50 backdrop-blur-md rounded-lg p-4">
+                            <summary className="text-white cursor-pointer">
+                                <i className="fas fa-question-circle mr-2"></i>
+                                Help
+                            </summary>
+                            <div className="mt-2 text-sm text-gray-300 space-y-1">
+                                <p><strong>Shortcuts:</strong></p>
+                                <p>• Ctrl+Z: Undo</p>
+                                <p>• Ctrl+Y: Redo</p>
+                                <p>• Ctrl+A: Select All</p>
+                                <p>• Ctrl+S: Export</p>
+                                <p>• Delete: Delete Selected</p>
+                                <p>• Escape: Clear Selection</p>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
