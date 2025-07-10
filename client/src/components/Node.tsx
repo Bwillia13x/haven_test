@@ -27,7 +27,12 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
     firstNodeForConnection,
     addConnector,
     setFirstNodeForConnection,
-    setConnectionMode
+    setConnectionMode,
+    deleteNodes,
+    addNode,
+    setNodeMaterial,
+    showContextMenu,
+    addNotification
   } = useAetherStore();
 
   const isSelected = selectedNodes.includes(id);
@@ -35,6 +40,73 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
 
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
+    
+    // Handle right-click for context menu
+    if (e.nativeEvent.button === 2) {
+      const screenPos = {
+        x: e.nativeEvent.clientX,
+        y: e.nativeEvent.clientY
+      };
+      
+      // Show context menu for this node
+      const contextItems = [
+        {
+          label: 'Delete Node',
+          action: () => deleteNodes([id]),
+          icon: () => <span>🗑️</span>,
+          shortcut: 'Del'
+        },
+        {
+          label: 'Duplicate Node',
+          action: () => {
+            const newPos = [position[0] + 1, position[1], position[2]] as [number, number, number];
+            addNode(newPos, materialProps === materials.selected ? 'default' : material, false);
+          },
+          icon: () => <span>📋</span>,
+          shortcut: 'Ctrl+D'
+        },
+        { type: 'separator' },
+        {
+          label: 'Change Material',
+          icon: () => <span>🎨</span>,
+          disabled: true
+        },
+        {
+          label: '  → Default',
+          action: () => setNodeMaterial(id, 'default'),
+          icon: () => <span style={{color: materials.default.color}}>●</span>
+        },
+        {
+          label: '  → Metallic',
+          action: () => setNodeMaterial(id, 'metallic'),
+          icon: () => <span style={{color: materials.metallic.color}}>●</span>
+        },
+        {
+          label: '  → Glass',
+          action: () => setNodeMaterial(id, 'glass'),
+          icon: () => <span style={{color: materials.glass.color}}>●</span>
+        },
+        {
+          label: '  → Neon',
+          action: () => setNodeMaterial(id, 'neon'),
+          icon: () => <span style={{color: materials.neon.color}}>●</span>
+        },
+        { type: 'separator' },
+        {
+          label: 'Focus Camera',
+          action: () => {
+            // This will be implemented when we add camera controls
+            addNotification('Camera focus coming soon', 'info');
+          },
+          icon: () => <span>🎯</span>,
+          shortcut: 'F'
+        }
+      ];
+      
+      showContextMenu(screenPos, contextItems);
+      selectNode(id, false); // Select the node when right-clicking
+      return;
+    }
     
     if (connectionMode) {
       if (!firstNodeForConnection) {
@@ -55,7 +127,8 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
     selectNode(id, multiSelect || e.ctrlKey || e.metaKey);
   }, [
     id, position, selectNode, multiSelect, connectionMode,
-    firstNodeForConnection, addConnector, setFirstNodeForConnection, setConnectionMode
+    firstNodeForConnection, addConnector, setFirstNodeForConnection, setConnectionMode,
+    materials, material, materialProps, deleteNodes, addNode, setNodeMaterial, showContextMenu, addNotification
   ]);
 
   const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
@@ -65,8 +138,26 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
     const newPosition = worldPos.clone().sub(dragOffset);
     const snappedPosition = snapPosition([newPosition.x, newPosition.y, newPosition.z]);
     
+    // If multiple nodes are selected, move them all together
+    if (selectedNodes.length > 1 && selectedNodes.includes(id)) {
+      const currentPosition = new THREE.Vector3(...position);
+      const deltaPosition = new THREE.Vector3(...snappedPosition).sub(currentPosition);
+      
+      // Move all selected nodes by the same delta
+      selectedNodes.forEach(nodeId => {
+        if (nodeId !== id) {
+          const node = useAetherStore.getState().nodes.find(n => n.id === nodeId);
+          if (node) {
+            const newPos = new THREE.Vector3(...node.position).add(deltaPosition);
+            const snappedNewPos = snapPosition([newPos.x, newPos.y, newPos.z]);
+            setNodePosition(nodeId, snappedNewPos);
+          }
+        }
+      });
+    }
+    
     setNodePosition(id, snappedPosition);
-  }, [isDragging, dragOffset, id, setNodePosition, snapPosition]);
+  }, [isDragging, dragOffset, id, setNodePosition, snapPosition, selectedNodes, position]);
 
   const handlePointerUp = useCallback(() => {
     setIsDragging(false);
@@ -89,6 +180,7 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onContextMenu={(e) => e.nativeEvent.preventDefault()}
     >
       <meshStandardMaterial
         color={materialProps.color}

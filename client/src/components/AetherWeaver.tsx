@@ -13,7 +13,7 @@ import { ContextMenu } from "./UI/ContextMenu";
 import { useAetherStore } from "../stores/useAetherStore";
 
 function Scene() {
-  const { nodes, connectors, showGrid, selectedNodes, selectNode, clearSelection, setMultiSelect } = useAetherStore();
+  const { nodes, connectors, showGrid, selectNode, clearSelection, setMultiSelect } = useAetherStore();
 
   const handleCanvasClick = useCallback((e: any) => {
     // Only clear selection if clicking empty space
@@ -103,11 +103,29 @@ function Scene() {
 }
 
 export default function AetherWeaver() {
-  const { undo, redo, exportProject, addNotification } = useAetherStore();
+  const { 
+    undo, 
+    redo, 
+    exportProject, 
+    addNotification, 
+    selectedNodes, 
+    nodes, 
+    deleteNodes, 
+    addNode, 
+    selectNodes, 
+    clearSelection, 
+    setConnectionMode, 
+    hideContextMenu 
+  } = useAetherStore();
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent shortcuts when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
       if (e.ctrlKey || e.metaKey) {
         switch (e.key) {
           case 'z':
@@ -129,13 +147,51 @@ export default function AetherWeaver() {
             e.preventDefault();
             exportProject();
             break;
+          case 'd':
+            e.preventDefault();
+            // Duplicate selected nodes
+            if (selectedNodes.length > 0) {
+              selectedNodes.forEach(nodeId => {
+                const node = nodes.find(n => n.id === nodeId);
+                if (node) {
+                  const newPos = [node.position[0] + 1, node.position[1], node.position[2]] as [number, number, number];
+                  addNode(newPos, node.material, false);
+                }
+              });
+              addNotification(`Duplicated ${selectedNodes.length} node(s)`, 'success');
+            }
+            break;
+          case 'a':
+            e.preventDefault();
+            // Select all nodes
+            const allNodeIds = nodes.map(n => n.id);
+            selectNodes(allNodeIds);
+            addNotification(`Selected ${allNodeIds.length} nodes`, 'success');
+            break;
+        }
+      } else {
+        switch (e.key) {
+          case 'Delete':
+          case 'Backspace':
+            e.preventDefault();
+            if (selectedNodes.length > 0) {
+              deleteNodes(selectedNodes);
+              addNotification(`Deleted ${selectedNodes.length} node(s)`, 'success');
+            }
+            break;
+          case 'Escape':
+            e.preventDefault();
+            clearSelection();
+            setConnectionMode(false);
+            hideContextMenu();
+            break;
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, exportProject, addNotification]);
+  }, [undo, redo, exportProject, addNotification, selectedNodes, nodes, deleteNodes, addNode, selectNodes, clearSelection, setConnectionMode, hideContextMenu]);
 
   return (
     <div className="relative w-full h-full bg-gray-900">
