@@ -29,10 +29,12 @@ export function CommandInput() {
   const inputRef = useRef<HTMLInputElement>(null);
   const { executeCommand } = useAetherStore();
 
-  const filteredCommands = QUICK_COMMANDS.filter(cmd => 
-    cmd.label.toLowerCase().includes(command.toLowerCase()) ||
-    cmd.command.toLowerCase().includes(command.toLowerCase())
-  );
+  const filteredCommands = command === "/" 
+    ? QUICK_COMMANDS 
+    : QUICK_COMMANDS.filter(cmd => 
+        cmd.label.toLowerCase().includes(command.toLowerCase().replace("/", "")) ||
+        cmd.command.toLowerCase().includes(command.toLowerCase().replace("/", ""))
+      );
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
