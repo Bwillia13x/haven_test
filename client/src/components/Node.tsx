@@ -36,7 +36,11 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
   } = useAetherStore();
 
   const isSelected = selectedNodes.includes(id);
-  const materialProps = materials[isSelected ? 'selected' : material] || materials.default;
+  
+  // Force re-render when material changes by accessing the node's material from store
+  const currentNode = useAetherStore(state => state.nodes.find(n => n.id === id));
+  const actualMaterial = currentNode?.material || material;
+  const materialProps = materials[isSelected ? 'selected' : actualMaterial] || materials.default;
 
   const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
@@ -60,7 +64,7 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
           label: 'Duplicate Node',
           action: () => {
             const newPos = [position[0] + 1, position[1], position[2]] as [number, number, number];
-            addNode(newPos, materialProps === materials.selected ? 'default' : material, false);
+            addNode(newPos, actualMaterial, false);
           },
           icon: () => <span>📋</span>,
           shortcut: 'Ctrl+D'
@@ -128,7 +132,7 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
   }, [
     id, position, selectNode, multiSelect, connectionMode,
     firstNodeForConnection, addConnector, setFirstNodeForConnection, setConnectionMode,
-    materials, material, materialProps, deleteNodes, addNode, setNodeMaterial, showContextMenu, addNotification
+    materials, actualMaterial, materialProps, deleteNodes, addNode, setNodeMaterial, showContextMenu, addNotification
   ]);
 
   const handlePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {

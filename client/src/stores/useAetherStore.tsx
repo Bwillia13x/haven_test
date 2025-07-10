@@ -188,11 +188,13 @@ export const useAetherStore = create<AetherState>()(
     },
 
     setNodeMaterial: (id, material) => {
+      get().saveToHistory();
       set(state => ({
         nodes: state.nodes.map(node =>
           node.id === id ? { ...node, material } : node
         )
       }));
+      get().addNotification(`Material changed to ${material}`, 'success');
     },
 
     deleteNodes: (nodeIds) => {
