@@ -76,6 +76,10 @@ interface AetherState {
   addConnector: (startNodeId: string, endNodeId: string) => void;
   setConnectorMaterial: (id: string, material: string) => void;
   
+  addMaterial: (name: string, material: Material) => void;
+  updateMaterial: (name: string, material: Material) => void;
+  deleteMaterial: (name: string) => void;
+  
   toggleConnectionMode: () => void;
   setConnectionMode: (enabled: boolean) => void;
   setFirstNodeForConnection: (nodeId: string | null) => void;
@@ -270,6 +274,48 @@ export const useAetherStore = create<AetherState>()(
           conn.id === id ? { ...conn, material } : conn
         )
       }));
+    },
+
+    // Material management
+    addMaterial: (name, material) => {
+      set(state => ({
+        materials: {
+          ...state.materials,
+          [name]: material
+        }
+      }));
+    },
+
+    updateMaterial: (name, material) => {
+      set(state => ({
+        materials: {
+          ...state.materials,
+          [name]: material
+        }
+      }));
+    },
+
+    deleteMaterial: (name) => {
+      const builtInMaterials = ['default', 'selected', 'connecting', 'metallic', 'glass', 'neon'];
+      if (builtInMaterials.includes(name)) {
+        get().addNotification('Cannot delete built-in materials', 'error');
+        return;
+      }
+
+      set(state => {
+        const newMaterials = { ...state.materials };
+        delete newMaterials[name];
+        
+        // Update any nodes using this material to default
+        const updatedNodes = state.nodes.map(node =>
+          node.material === name ? { ...node, material: 'default' } : node
+        );
+        
+        return {
+          materials: newMaterials,
+          nodes: updatedNodes
+        };
+      });
     },
 
     // Mode management

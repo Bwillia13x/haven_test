@@ -10,6 +10,7 @@ import { PropertyPanel } from "./UI/PropertyPanel";
 import { CommandInput } from "./UI/CommandInput";
 import { NotificationSystem } from "./UI/NotificationSystem";
 import { ContextMenu } from "./UI/ContextMenu";
+import { MaterialEditor } from "./UI/MaterialEditor";
 import { useAetherStore } from "../stores/useAetherStore";
 
 function Scene() {
@@ -214,6 +215,7 @@ export default function AetherWeaver() {
       <CommandInput />
       <NotificationSystem />
       <ContextMenu />
+      <MaterialEditor />
     </div>
   );
 }
