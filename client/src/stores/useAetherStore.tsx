@@ -20,6 +20,14 @@ interface ContextMenuItem {
   disabled?: boolean;
 }
 
+interface CameraBookmark {
+  id: string;
+  name: string;
+  position: [number, number, number];
+  target: [number, number, number];
+  created: number;
+}
+
 interface ContextMenu {
   position: { x: number; y: number };
   items: ContextMenuItem[];
@@ -59,6 +67,9 @@ interface AetherState {
   // Materials
   materials: Record<string, Material>;
   
+  // Camera bookmarks
+  cameraBookmarks: CameraBookmark[];
+  
   // Project
   projectName: string;
 
@@ -79,6 +90,9 @@ interface AetherState {
   addMaterial: (name: string, material: Material) => void;
   updateMaterial: (name: string, material: Material) => void;
   deleteMaterial: (name: string) => void;
+  
+  addCameraBookmark: (name: string, position: [number, number, number], target: [number, number, number]) => void;
+  deleteCameraBookmark: (id: string) => void;
   
   toggleConnectionMode: () => void;
   setConnectionMode: (enabled: boolean) => void;
@@ -137,6 +151,8 @@ export const useAetherStore = create<AetherState>()(
       glass: { color: '#87ceeb', opacity: 0.3, metalness: 0.0, roughness: 0.0 },
       neon: { color: '#ff1493', opacity: 1.0, metalness: 0.0, roughness: 0.0 }
     },
+    
+    cameraBookmarks: [],
     
     projectName: 'Untitled Project',
 
@@ -316,6 +332,29 @@ export const useAetherStore = create<AetherState>()(
           nodes: updatedNodes
         };
       });
+    },
+
+    // Camera bookmark management
+    addCameraBookmark: (name, position, target) => {
+      const bookmark: CameraBookmark = {
+        id: `bookmark_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name,
+        position,
+        target,
+        created: Date.now()
+      };
+
+      set(state => ({
+        cameraBookmarks: [...state.cameraBookmarks, bookmark]
+      }));
+
+      get().addNotification(`Camera bookmark "${name}" saved`, 'success');
+    },
+
+    deleteCameraBookmark: (id) => {
+      set(state => ({
+        cameraBookmarks: state.cameraBookmarks.filter(bookmark => bookmark.id !== id)
+      }));
     },
 
     // Mode management

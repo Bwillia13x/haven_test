@@ -11,6 +11,7 @@ import { CommandInput } from "./UI/CommandInput";
 import { NotificationSystem } from "./UI/NotificationSystem";
 import { ContextMenu } from "./UI/ContextMenu";
 import { MaterialEditor } from "./UI/MaterialEditor";
+import { CameraControls } from "./UI/CameraControls";
 import { useAetherStore } from "../stores/useAetherStore";
 
 function Scene() {
@@ -186,6 +187,21 @@ export default function AetherWeaver() {
             setConnectionMode(false);
             hideContextMenu();
             break;
+          case 'f':
+            e.preventDefault();
+            // Focus on selected nodes (if any) or frame all
+            if (selectedNodes.length > 0) {
+              // This will be handled by the CameraControls component via custom event
+              window.dispatchEvent(new CustomEvent('camera-focus-selected'));
+            } else {
+              window.dispatchEvent(new CustomEvent('camera-frame-all'));
+            }
+            break;
+          case 'h':
+            e.preventDefault();
+            // Home view
+            window.dispatchEvent(new CustomEvent('camera-home-view'));
+            break;
         }
       }
     };
@@ -216,6 +232,7 @@ export default function AetherWeaver() {
       <NotificationSystem />
       <ContextMenu />
       <MaterialEditor />
+      <CameraControls />
     </div>
   );
 }

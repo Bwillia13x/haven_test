@@ -155,7 +155,7 @@ export function MaterialEditor() {
     return (
       <Button
         onClick={() => setIsOpen(true)}
-        className="fixed top-20 right-4 z-40"
+        className="fixed top-4 right-4 z-40"
         variant="outline"
       >
         <Palette className="h-4 w-4 mr-2" />
