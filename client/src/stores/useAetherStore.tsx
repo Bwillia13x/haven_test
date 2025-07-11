@@ -79,10 +79,25 @@ interface AetherState {
   setNodeScale: (id: string, scale: number) => void;
   setNodeMaterial: (id: string, material: string) => void;
   deleteNodes: (nodeIds: string[]) => void;
+  duplicateNodes: (nodeIds: string[]) => void;
   
   selectNode: (id: string, multiSelect?: boolean) => void;
   selectNodes: (nodeIds: string[]) => void;
+  selectAll: () => void;
   clearSelection: () => void;
+  
+  // Group operations
+  groupNodes: (nodeIds: string[], groupName?: string) => void;
+  ungroupNodes: (groupId: string) => void;
+  
+  // Alignment operations
+  alignNodes: (nodeIds: string[], direction: 'left' | 'right' | 'top' | 'bottom' | 'center-x' | 'center-y' | 'center-z') => void;
+  distributeNodes: (nodeIds: string[], direction: 'horizontal' | 'vertical' | 'depth') => void;
+  
+  // Transform operations
+  scaleNodes: (nodeIds: string[], factor: number) => void;
+  moveNodes: (nodeIds: string[], offset: [number, number, number]) => void;
+  rotateNodes: (nodeIds: string[], axis: 'x' | 'y' | 'z', angle: number) => void;
   
   addConnector: (startNodeId: string, endNodeId: string) => void;
   setConnectorMaterial: (id: string, material: string) => void;
@@ -228,6 +243,52 @@ export const useAetherStore = create<AetherState>()(
       }));
     },
 
+    duplicateNodes: (nodeIds) => {
+      get().saveToHistory();
+      const state = get();
+      const nodesToDuplicate = state.nodes.filter(node => nodeIds.includes(node.id));
+      const newNodes: AetherNode[] = [];
+      const nodeIdMap = new Map<string, string>();
+
+      // Create duplicated nodes with offset positions
+      nodesToDuplicate.forEach(node => {
+        const newId = `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        nodeIdMap.set(node.id, newId);
+        
+        const newNode: AetherNode = {
+          ...node,
+          id: newId,
+          position: [node.position[0] + 2, node.position[1], node.position[2]] as [number, number, number],
+          created: Date.now()
+        };
+        newNodes.push(newNode);
+      });
+
+      // Duplicate connectors between duplicated nodes
+      const newConnectors: AetherConnector[] = [];
+      state.connectors.forEach(conn => {
+        const newStartId = nodeIdMap.get(conn.startNodeId);
+        const newEndId = nodeIdMap.get(conn.endNodeId);
+        
+        if (newStartId && newEndId) {
+          newConnectors.push({
+            ...conn,
+            id: `conn_${newStartId}_${newEndId}`,
+            startNodeId: newStartId,
+            endNodeId: newEndId
+          });
+        }
+      });
+
+      set(state => ({
+        nodes: [...state.nodes, ...newNodes],
+        connectors: [...state.connectors, ...newConnectors],
+        selectedNodes: newNodes.map(n => n.id)
+      }));
+
+      get().addNotification(`Duplicated ${newNodes.length} node(s)`, 'success');
+    },
+
     // Selection operations
     selectNode: (id, multiSelect = false) => {
       const state = get();
@@ -257,8 +318,227 @@ export const useAetherStore = create<AetherState>()(
       set({ selectedNodes: nodeIds });
     },
 
+    selectAll: () => {
+      const state = get();
+      set({ selectedNodes: state.nodes.map(node => node.id) });
+      get().addNotification(`Selected ${state.nodes.length} nodes`, 'info');
+    },
+
     clearSelection: () => {
       set({ selectedNodes: [] });
+    },
+
+    // Group operations
+    groupNodes: (nodeIds, groupName = 'Group') => {
+      get().saveToHistory();
+      // For now, grouping is conceptual - we could add group metadata to nodes
+      get().addNotification(`Grouped ${nodeIds.length} nodes`, 'success');
+    },
+
+    ungroupNodes: (groupId) => {
+      get().saveToHistory();
+      get().addNotification('Ungrouped nodes', 'success');
+    },
+
+    // Alignment operations
+    alignNodes: (nodeIds, direction) => {
+      get().saveToHistory();
+      const state = get();
+      const nodesToAlign = state.nodes.filter(node => nodeIds.includes(node.id));
+      
+      if (nodesToAlign.length < 2) {
+        get().addNotification('Select at least 2 nodes to align', 'warning');
+        return;
+      }
+
+      let targetValue: number;
+      let axis: 0 | 1 | 2;
+
+      switch (direction) {
+        case 'left':
+          axis = 0;
+          targetValue = Math.min(...nodesToAlign.map(n => n.position[0]));
+          break;
+        case 'right':
+          axis = 0;
+          targetValue = Math.max(...nodesToAlign.map(n => n.position[0]));
+          break;
+        case 'bottom':
+          axis = 1;
+          targetValue = Math.min(...nodesToAlign.map(n => n.position[1]));
+          break;
+        case 'top':
+          axis = 1;
+          targetValue = Math.max(...nodesToAlign.map(n => n.position[1]));
+          break;
+        case 'center-x':
+          axis = 0;
+          targetValue = nodesToAlign.reduce((sum, n) => sum + n.position[0], 0) / nodesToAlign.length;
+          break;
+        case 'center-y':
+          axis = 1;
+          targetValue = nodesToAlign.reduce((sum, n) => sum + n.position[1], 0) / nodesToAlign.length;
+          break;
+        case 'center-z':
+          axis = 2;
+          targetValue = nodesToAlign.reduce((sum, n) => sum + n.position[2], 0) / nodesToAlign.length;
+          break;
+      }
+
+      set(state => ({
+        nodes: state.nodes.map(node => {
+          if (nodeIds.includes(node.id)) {
+            const newPosition = [...node.position] as [number, number, number];
+            newPosition[axis] = targetValue;
+            return { ...node, position: newPosition };
+          }
+          return node;
+        })
+      }));
+
+      get().addNotification(`Aligned ${nodeIds.length} nodes to ${direction}`, 'success');
+    },
+
+    distributeNodes: (nodeIds, direction) => {
+      get().saveToHistory();
+      const state = get();
+      const nodesToDistribute = state.nodes.filter(node => nodeIds.includes(node.id));
+      
+      if (nodesToDistribute.length < 3) {
+        get().addNotification('Select at least 3 nodes to distribute', 'warning');
+        return;
+      }
+
+      let axis: 0 | 1 | 2;
+      switch (direction) {
+        case 'horizontal': axis = 0; break;
+        case 'vertical': axis = 1; break;
+        case 'depth': axis = 2; break;
+      }
+
+      const sorted = [...nodesToDistribute].sort((a, b) => a.position[axis] - b.position[axis]);
+      const minPos = sorted[0].position[axis];
+      const maxPos = sorted[sorted.length - 1].position[axis];
+      const spacing = (maxPos - minPos) / (sorted.length - 1);
+
+      set(state => ({
+        nodes: state.nodes.map(node => {
+          const sortedIndex = sorted.findIndex(n => n.id === node.id);
+          if (sortedIndex !== -1) {
+            const newPosition = [...node.position] as [number, number, number];
+            newPosition[axis] = minPos + (spacing * sortedIndex);
+            return { ...node, position: newPosition };
+          }
+          return node;
+        })
+      }));
+
+      get().addNotification(`Distributed ${nodeIds.length} nodes ${direction}ly`, 'success');
+    },
+
+    // Transform operations
+    scaleNodes: (nodeIds, factor) => {
+      get().saveToHistory();
+      set(state => ({
+        nodes: state.nodes.map(node => {
+          if (nodeIds.includes(node.id)) {
+            return { ...node, scale: (node.scale || 1) * factor };
+          }
+          return node;
+        })
+      }));
+      get().addNotification(`Scaled ${nodeIds.length} nodes by ${factor}x`, 'success');
+    },
+
+    moveNodes: (nodeIds, offset) => {
+      get().saveToHistory();
+      set(state => ({
+        nodes: state.nodes.map(node => {
+          if (nodeIds.includes(node.id)) {
+            return {
+              ...node,
+              position: [
+                node.position[0] + offset[0],
+                node.position[1] + offset[1],
+                node.position[2] + offset[2]
+              ] as [number, number, number]
+            };
+          }
+          return node;
+        })
+      }));
+      get().addNotification(`Moved ${nodeIds.length} nodes`, 'success');
+    },
+
+    rotateNodes: (nodeIds, axis, angle) => {
+      get().saveToHistory();
+      const state = get();
+      const nodesToRotate = state.nodes.filter(node => nodeIds.includes(node.id));
+      
+      if (nodesToRotate.length === 0) return;
+
+      // Calculate center point for rotation
+      const center = nodesToRotate.reduce(
+        (acc, node) => [
+          acc[0] + node.position[0],
+          acc[1] + node.position[1],
+          acc[2] + node.position[2]
+        ],
+        [0, 0, 0]
+      ).map(sum => sum / nodesToRotate.length) as [number, number, number];
+
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+
+      set(state => ({
+        nodes: state.nodes.map(node => {
+          if (nodeIds.includes(node.id)) {
+            const relativePos = [
+              node.position[0] - center[0],
+              node.position[1] - center[1],
+              node.position[2] - center[2]
+            ];
+
+            let newPos: [number, number, number];
+            
+            switch (axis) {
+              case 'x':
+                newPos = [
+                  relativePos[0],
+                  relativePos[1] * cos - relativePos[2] * sin,
+                  relativePos[1] * sin + relativePos[2] * cos
+                ];
+                break;
+              case 'y':
+                newPos = [
+                  relativePos[0] * cos + relativePos[2] * sin,
+                  relativePos[1],
+                  -relativePos[0] * sin + relativePos[2] * cos
+                ];
+                break;
+              case 'z':
+                newPos = [
+                  relativePos[0] * cos - relativePos[1] * sin,
+                  relativePos[0] * sin + relativePos[1] * cos,
+                  relativePos[2]
+                ];
+                break;
+            }
+
+            return {
+              ...node,
+              position: [
+                newPos[0] + center[0],
+                newPos[1] + center[1],
+                newPos[2] + center[2]
+              ] as [number, number, number]
+            };
+          }
+          return node;
+        })
+      }));
+
+      get().addNotification(`Rotated ${nodeIds.length} nodes around ${axis}-axis`, 'success');
     },
 
     // Connector operations

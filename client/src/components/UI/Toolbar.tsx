@@ -13,7 +13,9 @@ import {
   Redo,
   Trash2,
   Eye,
-  EyeOff
+  EyeOff,
+  Copy,
+  Layers
 } from "lucide-react";
 import { useAetherStore } from "../../stores/useAetherStore";
 
@@ -27,6 +29,8 @@ export function Toolbar() {
     toggleSnap,
     selectedNodes,
     deleteNodes,
+    duplicateNodes,
+    selectAll,
     addNode,
     undo,
     redo,
@@ -46,6 +50,18 @@ export function Toolbar() {
       deleteNodes(selectedNodes);
       addNotification(`Deleted ${selectedNodes.length} node(s)`, 'success');
     }
+  };
+
+  const handleDuplicateSelected = () => {
+    if (selectedNodes.length > 0) {
+      duplicateNodes(selectedNodes);
+    } else {
+      addNotification('Select nodes to duplicate', 'warning');
+    }
+  };
+
+  const handleSelectAll = () => {
+    selectAll();
   };
 
   const handleImport = () => {
@@ -107,6 +123,39 @@ export function Toolbar() {
             </TooltipTrigger>
             <TooltipContent>
               <p>Connection Mode (C)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Duplicate Selected */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDuplicateSelected}
+                disabled={selectedNodes.length === 0}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Duplicate Selected (Ctrl+D)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Select All */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSelectAll}
+              >
+                <Layers className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Select All (Ctrl+A)</p>
             </TooltipContent>
           </Tooltip>
 

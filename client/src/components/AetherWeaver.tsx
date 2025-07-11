@@ -12,6 +12,7 @@ import { NotificationSystem } from "./UI/NotificationSystem";
 import { ContextMenu } from "./UI/ContextMenu";
 import { MaterialEditor } from "./UI/MaterialEditor";
 import { CameraControls } from "./UI/CameraControls";
+import { AdvancedNodeOperations } from "./UI/AdvancedNodeOperations";
 import { useAetherStore } from "../stores/useAetherStore";
 
 function Scene() {
@@ -113,11 +114,12 @@ export default function AetherWeaver() {
     selectedNodes, 
     nodes, 
     deleteNodes, 
-    addNode, 
-    selectNodes, 
+    duplicateNodes,
+    selectAll,
     clearSelection, 
     setConnectionMode, 
-    hideContextMenu 
+    hideContextMenu,
+    addNode
   } = useAetherStore();
 
   // Keyboard shortcuts
@@ -153,22 +155,13 @@ export default function AetherWeaver() {
             e.preventDefault();
             // Duplicate selected nodes
             if (selectedNodes.length > 0) {
-              selectedNodes.forEach(nodeId => {
-                const node = nodes.find(n => n.id === nodeId);
-                if (node) {
-                  const newPos = [node.position[0] + 1, node.position[1], node.position[2]] as [number, number, number];
-                  addNode(newPos, node.material, false);
-                }
-              });
-              addNotification(`Duplicated ${selectedNodes.length} node(s)`, 'success');
+              duplicateNodes(selectedNodes);
             }
             break;
           case 'a':
             e.preventDefault();
             // Select all nodes
-            const allNodeIds = nodes.map(n => n.id);
-            selectNodes(allNodeIds);
-            addNotification(`Selected ${allNodeIds.length} nodes`, 'success');
+            selectAll();
             break;
         }
       } else {
@@ -208,7 +201,7 @@ export default function AetherWeaver() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, exportProject, addNotification, selectedNodes, nodes, deleteNodes, addNode, selectNodes, clearSelection, setConnectionMode, hideContextMenu]);
+  }, [undo, redo, exportProject, addNotification, selectedNodes, nodes, deleteNodes, addNode, duplicateNodes, selectAll, clearSelection, setConnectionMode, hideContextMenu]);
 
   return (
     <div className="relative w-full h-full bg-gray-900">
@@ -233,6 +226,7 @@ export default function AetherWeaver() {
       <ContextMenu />
       <MaterialEditor />
       <CameraControls />
+      <AdvancedNodeOperations />
     </div>
   );
 }
