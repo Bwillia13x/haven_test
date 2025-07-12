@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  aether-server:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    # Uncomment and configure below for DB in future
+    # depends_on:
+    #   - db
+
+  # db:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     POSTGRES_USER: aether
+  #     POSTGRES_PASSWORD: aetherpass
+  #     POSTGRES_DB: aetherdb
+  #   ports:
+  #     - "5432:5432" 
