@@ -24,5 +24,15 @@ module.exports = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   transformIgnorePatterns: [
     'node_modules/(?!(three|@react-three|zustand)/)'
-  ]
+  ],
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        types: ['jest', 'node', '@testing-library/jest-dom']
+      }
+    }
+  },
+  testEnvironmentOptions: {
+    customExportConditions: ['node', 'node-addons']
+  }
 };
