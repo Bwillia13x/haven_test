@@ -1,63 +1,57 @@
 import { useEffect } from "react";
-import { Card } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { CheckCircle, AlertCircle, Info, XCircle } from "lucide-react";
+import { Alert, AlertDescription } from "../ui/alert";
+import { CheckCircle, AlertCircle, Info, X } from "lucide-react";
 import { useAetherStore } from "../../stores/useAetherStore";
 
 export function NotificationSystem() {
   const { notifications, removeNotification } = useAetherStore();
 
   useEffect(() => {
+    // Auto-remove notifications after 5 seconds
     notifications.forEach(notification => {
-      const timer = setTimeout(() => {
-        removeNotification(notification.id);
-      }, 5000);
-
-      return () => clearTimeout(timer);
+      if (notification.autoRemove !== false) {
+        setTimeout(() => {
+          removeNotification(notification.id);
+        }, 5000);
+      }
     });
   }, [notifications, removeNotification]);
 
   if (notifications.length === 0) return null;
 
   return (
-    <div className="absolute top-20 right-4 space-y-2 z-50">
-      {notifications.map((notification) => (
-        <Card
-          key={notification.id}
-          className="p-3 bg-gray-800/95 backdrop-blur-sm border-gray-700 max-w-sm animate-in slide-in-from-right"
-        >
-          <div className="flex items-center gap-2">
-            {notification.type === 'success' && (
-              <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />
-            )}
-            {notification.type === 'error' && (
-              <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            )}
-            {notification.type === 'warning' && (
-              <AlertCircle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-            )}
-            {notification.type === 'info' && (
-              <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />
-            )}
-            
-            <span className="text-sm text-white flex-1">
+    <div className="fixed top-4 right-4 space-y-2 z-50 max-w-sm">
+      {notifications.map((notification) => {
+        const Icon = notification.type === 'success' ? CheckCircle :
+                   notification.type === 'error' ? AlertCircle :
+                   notification.type === 'warning' ? AlertCircle : Info;
+        
+        const bgColor = notification.type === 'success' ? 'bg-green-800/90' :
+                       notification.type === 'error' ? 'bg-red-800/90' :
+                       notification.type === 'warning' ? 'bg-yellow-800/90' : 'bg-blue-800/90';
+        
+        const iconColor = notification.type === 'success' ? 'text-green-400' :
+                         notification.type === 'error' ? 'text-red-400' :
+                         notification.type === 'warning' ? 'text-yellow-400' : 'text-blue-400';
+
+        return (
+          <Alert 
+            key={notification.id} 
+            className={`${bgColor} backdrop-blur-sm border-gray-600 text-white relative`}
+          >
+            <Icon className={`h-4 w-4 ${iconColor}`} />
+            <AlertDescription className="pr-6">
               {notification.message}
-            </span>
-            
-            <Badge 
-              variant="secondary" 
-              className={`text-xs px-2 py-0.5 ${
-                notification.type === 'success' ? 'bg-green-600' :
-                notification.type === 'error' ? 'bg-red-600' :
-                notification.type === 'warning' ? 'bg-yellow-600' :
-                'bg-blue-600'
-              }`}
+            </AlertDescription>
+            <button
+              onClick={() => removeNotification(notification.id)}
+              className="absolute top-2 right-2 text-gray-400 hover:text-white"
             >
-              {notification.type}
-            </Badge>
-          </div>
-        </Card>
-      ))}
+              <X className="h-3 w-3" />
+            </button>
+          </Alert>
+        );
+      })}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
-import { AetherNode, AetherConnector, Material, NotificationType } from "../types/aether";
+import { AetherNode, AetherConnector, AetherSurface, Material, NotificationType, NodeGeometry, NodeProperties, SurfaceType } from "../types/aether";
 import { executeAICommand } from "../utils/aiCommands";
 import { exportProjectToJSON } from "../utils/exportUtils";
 
@@ -43,6 +43,7 @@ interface AetherState {
   // Core state
   nodes: AetherNode[];
   connectors: AetherConnector[];
+  surfaces: AetherSurface[];
   selectedNodes: string[];
   
   // UI state
@@ -53,6 +54,7 @@ interface AetherState {
   snapToGrid: boolean;
   gridSize: number;
   animationSpeed: number;
+  movementMode: boolean;
   
   // History
   history: HistoryState[];
@@ -74,10 +76,14 @@ interface AetherState {
   projectName: string;
 
   // Actions
-  addNode: (position?: [number, number, number], material?: string, animated?: boolean) => string;
+  addNode: (position?: [number, number, number], material?: string, animated?: boolean, geometry?: NodeGeometry) => string;
+  addAdvancedNode: (geometry: NodeGeometry, properties: Partial<NodeProperties>, material?: string) => string;
   setNodePosition: (id: string, position: [number, number, number]) => void;
   setNodeScale: (id: string, scale: number) => void;
   setNodeMaterial: (id: string, material: string) => void;
+  setNodeGeometry: (id: string, geometry: NodeGeometry) => void;
+  setNodeProperties: (id: string, properties: Partial<NodeProperties>) => void;
+  updateNodeProperty: (id: string, property: keyof NodeProperties, value: any) => void;
   deleteNodes: (nodeIds: string[]) => void;
   duplicateNodes: (nodeIds: string[]) => void;
   
@@ -100,7 +106,20 @@ interface AetherState {
   rotateNodes: (nodeIds: string[], axis: 'x' | 'y' | 'z', angle: number) => void;
   
   addConnector: (startNodeId: string, endNodeId: string) => void;
+  addAdvancedConnector: (startNodeId: string, endNodeId: string, type?: ConnectorType, properties?: Partial<ConnectorProperties>) => void;
+  setConnectorType: (id: string, type: ConnectorType) => void;
+  setConnectorProperties: (id: string, properties: Partial<ConnectorProperties>) => void;
   setConnectorMaterial: (id: string, material: string) => void;
+
+  // Surface operations
+  generateSurface: (nodeIds: string[], surfaceType?: SurfaceType) => string;
+  generateSurfaceFromNetwork: (startNodeId: string, maxDepth?: number) => string;
+  generateLoftSurface: (chain1NodeIds: string[], chain2NodeIds: string[]) => string;
+  extrudeNodes: (nodeIds: string[], direction: [number, number, number], distance: number) => string;
+  revolveNodes: (nodeIds: string[], axis: [number, number, number], angle: number, segments?: number) => string;
+  generateSubdivisionSurface: (nodeIds: string[], subdivisionType?: 'catmull-clark' | 'loop' | 'doo-sabin', iterations?: number) => string;
+  removeSurface: (id: string) => void;
+  setSurfaceProperties: (id: string, properties: Partial<AetherSurface>) => void;
   
   addMaterial: (name: string, material: Material) => void;
   updateMaterial: (name: string, material: Material) => void;
@@ -112,9 +131,15 @@ interface AetherState {
   toggleConnectionMode: () => void;
   setConnectionMode: (enabled: boolean) => void;
   setFirstNodeForConnection: (nodeId: string | null) => void;
-  
+
+  toggleMovementMode: () => void;
+  setMovementMode: (enabled: boolean) => void;
+
   setMultiSelect: (enabled: boolean) => void;
-  
+
+  // Shape presets
+  createShapePreset: (presetId: string, options?: any) => void;
+
   toggleGrid: () => void;
   toggleSnap: () => void;
   setGridSize: (size: number) => void;
@@ -142,6 +167,7 @@ export const useAetherStore = create<AetherState>()(
     // Initial state
     nodes: [],
     connectors: [],
+    surfaces: [],
     selectedNodes: [],
     
     connectionMode: false,
@@ -151,6 +177,7 @@ export const useAetherStore = create<AetherState>()(
     snapToGrid: false,
     gridSize: 1,
     animationSpeed: 1,
+    movementMode: false,
     
     history: [],
     historyIndex: -1,
@@ -171,21 +198,66 @@ export const useAetherStore = create<AetherState>()(
     
     projectName: 'Untitled Project',
 
+    // Migration helper for legacy nodes
+    migrateNode: (node: AetherNode): AetherNode => {
+      if (!node.geometry || !node.properties) {
+        return {
+          ...node,
+          geometry: 'sphere',
+          properties: {
+            position: node.position,
+            rotation: [0, 0, 0],
+            scale: [node.scale || 1, node.scale || 1, node.scale || 1],
+            radius: 0.15,
+            height: 0.3,
+            width: 0.3,
+            depth: 0.3,
+            segments: 16,
+            rings: 8,
+            visible: true,
+            castShadow: true,
+            receiveShadow: true,
+            wireframe: false
+          }
+        };
+      }
+      return node;
+    },
+
     // Node operations
     addNode: (position, material = 'default', animated = true) => {
       get().saveToHistory();
       
       const id = `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const defaultPosition = position || [
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8
+      ];
+
       const newNode: AetherNode = {
         id,
-        position: position || [
-          (Math.random() - 0.5) * 8,
-          (Math.random() - 0.5) * 8,
-          (Math.random() - 0.5) * 8
-        ],
+        geometry: 'sphere', // Default geometry
+        properties: {
+          position: defaultPosition,
+          rotation: [0, 0, 0],
+          scale: animated ? [0.1, 0.1, 0.1] : [1, 1, 1],
+          radius: 0.15,
+          height: 0.3,
+          width: 0.3,
+          depth: 0.3,
+          segments: 16,
+          rings: 8,
+          visible: true,
+          castShadow: true,
+          receiveShadow: true,
+          wireframe: false
+        },
         material,
-        scale: animated ? 0.1 : 1,
-        created: Date.now()
+        created: Date.now(),
+        // Legacy support
+        position: defaultPosition,
+        scale: animated ? 0.1 : 1
       };
       
       set(state => ({ nodes: [...state.nodes, newNode] }));
@@ -203,6 +275,45 @@ export const useAetherStore = create<AetherState>()(
         requestAnimationFrame(animateScale);
       }
       
+      return id;
+    },
+
+    addAdvancedNode: (geometry, properties, material = 'default') => {
+      get().saveToHistory();
+
+      const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const defaultProperties: NodeProperties = {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: [1, 1, 1],
+        radius: 0.15,
+        height: 0.3,
+        width: 0.3,
+        depth: 0.3,
+        segments: 16,
+        rings: 8,
+        visible: true,
+        castShadow: true,
+        receiveShadow: true,
+        wireframe: false,
+        ...properties
+      };
+
+      const newNode: AetherNode = {
+        id,
+        geometry,
+        properties: defaultProperties,
+        material,
+        created: Date.now(),
+        // Legacy support
+        position: defaultProperties.position,
+        scale: 1
+      };
+
+      set(state => ({
+        nodes: [...state.nodes, newNode]
+      }));
+
       return id;
     },
 
@@ -230,6 +341,60 @@ export const useAetherStore = create<AetherState>()(
         )
       }));
       get().addNotification(`Material changed to ${material}`, 'success');
+    },
+
+    setNodeGeometry: (id, geometry) => {
+      get().saveToHistory();
+      set(state => ({
+        nodes: state.nodes.map(node =>
+          node.id === id ? {
+            ...node,
+            geometry: geometry || 'sphere'
+          } : node
+        )
+      }));
+      get().addNotification(`Node geometry changed to ${geometry}`, 'success');
+    },
+
+    setNodeProperties: (id, properties) => {
+      get().saveToHistory();
+      set(state => ({
+        nodes: state.nodes.map(node =>
+          node.id === id ? {
+            ...node,
+            properties: node.properties ? { ...node.properties, ...properties } : {
+              position: node.position,
+              rotation: [0, 0, 0],
+              scale: [node.scale || 1, node.scale || 1, node.scale || 1],
+              visible: true,
+              castShadow: true,
+              receiveShadow: true,
+              wireframe: false,
+              ...properties
+            }
+          } : node
+        )
+      }));
+    },
+
+    updateNodeProperty: (id, property, value) => {
+      set(state => ({
+        nodes: state.nodes.map(node =>
+          node.id === id ? {
+            ...node,
+            properties: node.properties ? { ...node.properties, [property]: value } : {
+              position: node.position,
+              rotation: [0, 0, 0],
+              scale: [node.scale || 1, node.scale || 1, node.scale || 1],
+              visible: true,
+              castShadow: true,
+              receiveShadow: true,
+              wireframe: false,
+              [property]: value
+            }
+          } : node
+        )
+      }));
     },
 
     deleteNodes: (nodeIds) => {
@@ -545,23 +710,323 @@ export const useAetherStore = create<AetherState>()(
     addConnector: (startNodeId, endNodeId) => {
       const state = get();
       const connectorId = `conn_${startNodeId}_${endNodeId}`;
-      
+
+      // Check if both nodes exist
+      const startNode = state.nodes.find(n => n.id === startNodeId);
+      const endNode = state.nodes.find(n => n.id === endNodeId);
+
+      if (!startNode || !endNode) {
+        get().addNotification('Cannot connect: one or both nodes not found', 'error');
+        return;
+      }
+
       const exists = state.connectors.some(c =>
         (c.startNodeId === startNodeId && c.endNodeId === endNodeId) ||
         (c.startNodeId === endNodeId && c.endNodeId === startNodeId)
       );
-      
+
       if (!exists) {
         set(state => ({
           connectors: [...state.connectors, {
             id: connectorId,
+            type: 'straight',
             startNodeId,
             endNodeId,
             material: 'default',
+            properties: {
+              thickness: 1,
+              style: 'solid',
+              segments: 16
+            },
+            // Legacy support
             thickness: 1
           }]
         }));
+        get().addNotification(`Connected nodes ${startNodeId.slice(-4)} → ${endNodeId.slice(-4)}`, 'success');
+      } else {
+        get().addNotification('Connector already exists between these nodes', 'warning');
       }
+    },
+
+    addAdvancedConnector: (startNodeId, endNodeId, type = 'straight', properties = {}) => {
+      const state = get();
+      const connectorId = `conn_${startNodeId}_${endNodeId}`;
+
+      // Check if both nodes exist
+      const startNode = state.nodes.find(n => n.id === startNodeId);
+      const endNode = state.nodes.find(n => n.id === endNodeId);
+
+      if (!startNode || !endNode) {
+        get().addNotification('Cannot connect: one or both nodes not found', 'error');
+        return;
+      }
+
+      const exists = state.connectors.some(c =>
+        (c.startNodeId === startNodeId && c.endNodeId === endNodeId) ||
+        (c.startNodeId === endNodeId && c.endNodeId === startNodeId)
+      );
+
+      if (!exists) {
+        const defaultProperties: ConnectorProperties = {
+          thickness: 1,
+          style: 'solid',
+          segments: 16,
+          ...properties
+        };
+
+        set(state => ({
+          connectors: [...state.connectors, {
+            id: connectorId,
+            type,
+            startNodeId,
+            endNodeId,
+            material: 'default',
+            properties: defaultProperties,
+            // Legacy support
+            thickness: defaultProperties.thickness
+          }]
+        }));
+        get().addNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} connector created`, 'success');
+      } else {
+        get().addNotification('Connector already exists between these nodes', 'warning');
+      }
+    },
+
+    setConnectorType: (id, type) => {
+      set(state => ({
+        connectors: state.connectors.map(connector =>
+          connector.id === id ? { ...connector, type } : connector
+        )
+      }));
+      get().addNotification(`Connector type changed to ${type}`, 'success');
+    },
+
+    setConnectorProperties: (id, properties) => {
+      set(state => ({
+        connectors: state.connectors.map(connector =>
+          connector.id === id ? {
+            ...connector,
+            properties: connector.properties ? { ...connector.properties, ...properties } : {
+              thickness: 1,
+              style: 'solid',
+              segments: 16,
+              ...properties
+            }
+          } : connector
+        )
+      }));
+    },
+
+    // Surface operations
+    generateSurface: (nodeIds, surfaceType = 'triangulation') => {
+      get().saveToHistory();
+
+      const id = `surface_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const newSurface: AetherSurface = {
+        id,
+        nodeIds,
+        surfaceType,
+        material: 'default',
+        opacity: 0.7,
+        wireframe: false,
+        doubleSided: true,
+        created: Date.now()
+      };
+
+      set(state => ({
+        surfaces: [...state.surfaces, newSurface]
+      }));
+
+      get().addNotification(`Generated ${surfaceType} surface from ${nodeIds.length} nodes`, 'success');
+      return id;
+    },
+
+    generateSurfaceFromNetwork: (startNodeId, maxDepth = 3) => {
+      const state = get();
+      const visited = new Set<string>();
+      const networkNodes: string[] = [];
+
+      const traverse = (nodeId: string, depth: number) => {
+        if (depth > maxDepth || visited.has(nodeId)) return;
+
+        visited.add(nodeId);
+        networkNodes.push(nodeId);
+
+        // Find connected nodes
+        const connections = state.connectors.filter(c =>
+          c.startNodeId === nodeId || c.endNodeId === nodeId
+        );
+
+        connections.forEach(connection => {
+          const nextNodeId = connection.startNodeId === nodeId
+            ? connection.endNodeId
+            : connection.startNodeId;
+          traverse(nextNodeId, depth + 1);
+        });
+      };
+
+      traverse(startNodeId, 0);
+
+      if (networkNodes.length < 3) {
+        get().addNotification('Need at least 3 connected nodes to generate surface', 'warning');
+        return '';
+      }
+
+      return get().generateSurface(networkNodes, 'triangulation');
+    },
+
+    generateLoftSurface: (chain1NodeIds, chain2NodeIds) => {
+      get().saveToHistory();
+
+      const id = `loft_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const allNodeIds = [...chain1NodeIds, ...chain2NodeIds];
+
+      const newSurface: AetherSurface = {
+        id,
+        nodeIds: allNodeIds,
+        surfaceType: 'quad',
+        material: 'default',
+        opacity: 0.7,
+        wireframe: false,
+        doubleSided: true,
+        created: Date.now(),
+        isLoft: true,
+        chain1: chain1NodeIds,
+        chain2: chain2NodeIds
+      };
+
+      set(state => ({
+        surfaces: [...state.surfaces, newSurface]
+      }));
+
+      get().addNotification(`Generated loft surface between ${chain1NodeIds.length} and ${chain2NodeIds.length} node chains`, 'success');
+      return id;
+    },
+
+    extrudeNodes: (nodeIds, direction, distance) => {
+      get().saveToHistory();
+
+      const state = get();
+      const originalNodes = nodeIds.map(id => state.nodes.find(n => n.id === id)).filter(Boolean);
+
+      if (originalNodes.length < 2) {
+        get().addNotification('Need at least 2 nodes to extrude', 'warning');
+        return '';
+      }
+
+      // Create extruded nodes
+      const extrudedNodeIds: string[] = [];
+      const allNodeIds: string[] = [...nodeIds];
+
+      originalNodes.forEach(node => {
+        const originalPos = node!.properties?.position || node!.position;
+        const extrudedPos: [number, number, number] = [
+          originalPos[0] + direction[0] * distance,
+          originalPos[1] + direction[1] * distance,
+          originalPos[2] + direction[2] * distance
+        ];
+
+        const extrudedId = get().addAdvancedNode(node!.geometry || 'sphere', {
+          position: extrudedPos,
+          ...node!.properties
+        }, node!.material);
+
+        extrudedNodeIds.push(extrudedId);
+        allNodeIds.push(extrudedId);
+      });
+
+      // Create surface connecting original and extruded nodes
+      const surfaceId = get().generateLoftSurface(nodeIds, extrudedNodeIds);
+
+      get().addNotification(`Extruded ${nodeIds.length} nodes by distance ${distance}`, 'success');
+      return surfaceId;
+    },
+
+    revolveNodes: (nodeIds, axis, angle, segments = 16) => {
+      get().saveToHistory();
+
+      const state = get();
+      const originalNodes = nodeIds.map(id => state.nodes.find(n => n.id === id)).filter(Boolean);
+
+      if (originalNodes.length < 2) {
+        get().addNotification('Need at least 2 nodes to revolve', 'warning');
+        return '';
+      }
+
+      const allNodeIds: string[] = [...nodeIds];
+      const axisVector = new THREE.Vector3(...axis).normalize();
+
+      // Create revolved nodes at different angles
+      for (let i = 1; i <= segments; i++) {
+        const currentAngle = (angle / segments) * i;
+        const rotationMatrix = new THREE.Matrix4().makeRotationAxis(axisVector, currentAngle);
+
+        originalNodes.forEach(node => {
+          const originalPos = new THREE.Vector3(...(node!.properties?.position || node!.position));
+          const rotatedPos = originalPos.clone().applyMatrix4(rotationMatrix);
+
+          const revolvedId = get().addAdvancedNode(node!.geometry || 'sphere', {
+            position: [rotatedPos.x, rotatedPos.y, rotatedPos.z],
+            ...node!.properties
+          }, node!.material);
+
+          allNodeIds.push(revolvedId);
+        });
+      }
+
+      // Create surface from all revolved nodes
+      const surfaceId = get().generateSurface(allNodeIds, 'quad');
+
+      get().addNotification(`Revolved ${nodeIds.length} nodes by ${angle} radians with ${segments} segments`, 'success');
+      return surfaceId;
+    },
+
+    generateSubdivisionSurface: (nodeIds, subdivisionType = 'catmull-clark', iterations = 1) => {
+      get().saveToHistory();
+
+      if (nodeIds.length < 4) {
+        get().addNotification('Need at least 4 nodes to generate subdivision surface', 'warning');
+        return '';
+      }
+
+      const id = `subdivision_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const newSurface: AetherSurface = {
+        id,
+        nodeIds,
+        surfaceType: 'triangulation', // Base surface type
+        material: 'default',
+        opacity: 0.8,
+        wireframe: false,
+        doubleSided: true,
+        created: Date.now(),
+        isSubdivision: true,
+        subdivisionType,
+        subdivisionIterations: iterations,
+        showControlMesh: false
+      };
+
+      set(state => ({
+        surfaces: [...state.surfaces, newSurface]
+      }));
+
+      get().addNotification(`Generated ${subdivisionType} subdivision surface with ${iterations} iteration${iterations !== 1 ? 's' : ''}`, 'success');
+      return id;
+    },
+
+    removeSurface: (id) => {
+      get().saveToHistory();
+      set(state => ({
+        surfaces: state.surfaces.filter(surface => surface.id !== id)
+      }));
+      get().addNotification('Surface removed', 'success');
+    },
+
+    setSurfaceProperties: (id, properties) => {
+      set(state => ({
+        surfaces: state.surfaces.map(surface =>
+          surface.id === id ? { ...surface, ...properties } : surface
+        )
+      }));
     },
 
     setConnectorMaterial: (id, material) => {
@@ -654,8 +1119,88 @@ export const useAetherStore = create<AetherState>()(
       set({ firstNodeForConnection: nodeId });
     },
 
+    toggleMovementMode: () => {
+      set(state => ({
+        movementMode: !state.movementMode,
+        connectionMode: false, // Disable connection mode when enabling movement mode
+        firstNodeForConnection: null
+      }));
+    },
+
+    setMovementMode: (enabled) => {
+      set({
+        movementMode: enabled,
+        connectionMode: enabled ? false : get().connectionMode, // Disable connection mode if enabling movement mode
+        firstNodeForConnection: enabled ? null : get().firstNodeForConnection
+      });
+    },
+
     setMultiSelect: (enabled) => {
       set({ multiSelect: enabled });
+    },
+
+    // Shape preset operations
+    createShapePreset: (presetId, options = {}) => {
+      const { getPresetById } = require('../utils/shapePresets');
+      const preset = getPresetById(presetId);
+
+      if (!preset) {
+        get().addNotification(`Shape preset '${presetId}' not found`, 'error');
+        return;
+      }
+
+      get().saveToHistory();
+
+      try {
+        const result = preset.generate(options);
+        const nodeIds: string[] = [];
+
+        // Create nodes
+        result.nodes.forEach((nodeData, index) => {
+          const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${index}`;
+          const newNode: AetherNode = {
+            id,
+            position: nodeData.position,
+            material: nodeData.material || options.material || 'default',
+            scale: nodeData.scale || 1
+          };
+
+          nodeIds.push(id);
+
+          set(state => ({
+            nodes: [...state.nodes, newNode]
+          }));
+        });
+
+        // Create connectors
+        result.connectors.forEach(connectorData => {
+          const startNodeId = nodeIds[connectorData.startIndex];
+          const endNodeId = nodeIds[connectorData.endIndex];
+
+          if (startNodeId && endNodeId) {
+            const connectorId = `conn_${startNodeId}_${endNodeId}`;
+            const newConnector: AetherConnector = {
+              id: connectorId,
+              startNodeId,
+              endNodeId,
+              material: connectorData.material || 'default',
+              thickness: connectorData.thickness || 1
+            };
+
+            set(state => ({
+              connectors: [...state.connectors, newConnector]
+            }));
+          }
+        });
+
+        // Select the newly created nodes
+        set({ selectedNodes: nodeIds });
+
+        get().addNotification(`Created ${preset.name} with ${result.nodes.length} nodes`, 'success');
+      } catch (error) {
+        console.error('Error creating shape preset:', error);
+        get().addNotification(`Failed to create ${preset.name}`, 'error');
+      }
     },
 
     // Grid and snap

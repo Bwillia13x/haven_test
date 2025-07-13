@@ -24,6 +24,7 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
     materials,
     multiSelect,
     connectionMode,
+    movementMode,
     firstNodeForConnection,
     addConnector,
     setFirstNodeForConnection,
@@ -112,7 +113,10 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
       return;
     }
     
-    if (connectionMode) {
+    // Check if we should enable movement (movement mode OR shift key pressed)
+    const shouldEnableMovement = movementMode || e.shiftKey;
+
+    if (connectionMode && !shouldEnableMovement) {
       if (!firstNodeForConnection) {
         setFirstNodeForConnection(id);
       } else if (firstNodeForConnection !== id) {
@@ -123,14 +127,20 @@ export function Node({ id, position, material = 'default', scale = 1 }: NodeProp
       return;
     }
 
-    setIsDragging(true);
-    const worldPos = e.point;
-    const currentPos = new THREE.Vector3(...position);
-    setDragOffset(worldPos.clone().sub(currentPos));
-    
-    selectNode(id, multiSelect || e.ctrlKey || e.metaKey);
+    // Enable dragging if movement mode is on OR shift key is pressed
+    if (shouldEnableMovement) {
+      setIsDragging(true);
+      const worldPos = e.point;
+      const currentPos = new THREE.Vector3(...position);
+      setDragOffset(worldPos.clone().sub(currentPos));
+
+      selectNode(id, multiSelect || e.ctrlKey || e.metaKey);
+    } else if (!connectionMode) {
+      // Just select the node if not in connection mode and not moving
+      selectNode(id, multiSelect || e.ctrlKey || e.metaKey);
+    }
   }, [
-    id, position, selectNode, multiSelect, connectionMode,
+    id, position, selectNode, multiSelect, connectionMode, movementMode,
     firstNodeForConnection, addConnector, setFirstNodeForConnection, setConnectionMode,
     materials, actualMaterial, materialProps, deleteNodes, addNode, setNodeMaterial, showContextMenu, addNotification
   ]);

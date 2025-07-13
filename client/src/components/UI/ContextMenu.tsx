@@ -6,50 +6,57 @@ import { useAetherStore } from "../../stores/useAetherStore";
 export function ContextMenu() {
   const { contextMenu, hideContextMenu } = useAetherStore();
 
-  if (!contextMenu) return null;
+  if (!contextMenu?.visible) return null;
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop to close menu */}
       <div 
-        className="fixed inset-0 z-40"
+        className="fixed inset-0 z-40" 
         onClick={hideContextMenu}
       />
       
-      {/* Context Menu */}
+      {/* Context menu */}
       <Card 
-        className="fixed z-50 bg-gray-800/95 backdrop-blur-sm border-gray-700 p-1 min-w-48"
+        className="fixed bg-gray-800/95 backdrop-blur-sm border-gray-600 p-1 z-50 min-w-48"
         style={{
           left: contextMenu.position.x,
           top: contextMenu.position.y,
         }}
       >
-        {contextMenu.items.map((item, index) => (
-          <div key={index}>
-            {item.type === 'separator' ? (
-              <Separator className="my-1 bg-gray-600" />
-            ) : (
+        <div className="space-y-1">
+          {contextMenu.items.map((item, index) => {
+            if (item.type === 'separator') {
+              return <Separator key={index} className="my-1 bg-gray-600" />;
+            }
+
+            return (
               <Button
+                key={index}
                 variant="ghost"
                 size="sm"
-                className="w-full justify-start text-white hover:bg-gray-700 h-8"
+                className="w-full justify-start text-left text-white hover:bg-gray-700 disabled:opacity-50"
+                disabled={item.disabled}
                 onClick={() => {
-                  item.action?.();
+                  if (item.action) {
+                    item.action();
+                  }
                   hideContextMenu();
                 }}
-                disabled={item.disabled}
               >
-                {item.icon && <item.icon className="w-4 h-4 mr-2" />}
-                {item.label}
-                {item.shortcut && (
-                  <span className="ml-auto text-xs text-gray-400">
-                    {item.shortcut}
-                  </span>
-                )}
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    {item.icon && <span className="text-sm">{item.icon()}</span>}
+                    <span className="text-sm">{item.label}</span>
+                  </div>
+                  {item.shortcut && (
+                    <span className="text-xs text-gray-400">{item.shortcut}</span>
+                  )}
+                </div>
               </Button>
-            )}
-          </div>
-        ))}
+            );
+          })}
+        </div>
       </Card>
     </>
   );

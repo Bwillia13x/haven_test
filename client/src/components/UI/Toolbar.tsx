@@ -2,27 +2,39 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Separator } from "../ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { 
-  MousePointer, 
-  Plus, 
-  Link, 
-  Grid3X3, 
-  Download, 
-  Upload, 
-  Undo, 
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import {
+  MousePointer,
+  Plus,
+  Link,
+  Grid3X3,
+  Download,
+  Upload,
+  Undo,
   Redo,
   Trash2,
   Eye,
   EyeOff,
   Copy,
-  Layers
+  Layers,
+  Move,
+  ChevronDown,
+  Sphere,
+  Box,
+  Cylinder,
+  Triangle,
+  Square,
+  Circle
 } from "lucide-react";
 import { useAetherStore } from "../../stores/useAetherStore";
+import { NodeGeometry } from "../../types/aether";
 
 export function Toolbar() {
   const {
     connectionMode,
     toggleConnectionMode,
+    movementMode,
+    toggleMovementMode,
     showGrid,
     toggleGrid,
     snapToGrid,
@@ -32,6 +44,7 @@ export function Toolbar() {
     duplicateNodes,
     selectAll,
     addNode,
+    addAdvancedNode,
     undo,
     redo,
     history,
@@ -40,9 +53,15 @@ export function Toolbar() {
     addNotification
   } = useAetherStore();
 
-  const handleAddNode = () => {
-    const id = addNode();
-    addNotification('Node created', 'success');
+  const handleAddNode = (geometry: NodeGeometry = 'sphere') => {
+    const id = addAdvancedNode(geometry, {
+      position: [
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8
+      ]
+    });
+    addNotification(`${geometry.charAt(0).toUpperCase() + geometry.slice(1)} node created`, 'success');
   };
 
   const handleDeleteSelected = () => {
@@ -80,7 +99,7 @@ export function Toolbar() {
 
   return (
     <TooltipProvider>
-      <Card className="absolute top-4 left-4 p-2 bg-gray-800/90 backdrop-blur-sm border-gray-700">
+      <Card className="absolute top-4 left-4 p-2 bg-gray-800/90 backdrop-blur-sm border-gray-700 z-50">
         <div className="flex items-center gap-2">
           {/* Selection Mode */}
           <Tooltip>
@@ -98,17 +117,48 @@ export function Toolbar() {
             </TooltipContent>
           </Tooltip>
 
-          {/* Add Node */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="sm" onClick={handleAddNode}>
-                <Plus className="w-4 h-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Add Node (N)</p>
-            </TooltipContent>
-          </Tooltip>
+          {/* Add Node Dropdown */}
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="flex items-center gap-1">
+                    <Plus className="w-4 h-4" />
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add Node (N)</p>
+              </TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onClick={() => handleAddNode('sphere')} className="flex items-center gap-2">
+                <Sphere className="w-4 h-4" />
+                Sphere
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleAddNode('cube')} className="flex items-center gap-2">
+                <Box className="w-4 h-4" />
+                Cube
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleAddNode('cylinder')} className="flex items-center gap-2">
+                <Cylinder className="w-4 h-4" />
+                Cylinder
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleAddNode('cone')} className="flex items-center gap-2">
+                <Triangle className="w-4 h-4" />
+                Cone
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleAddNode('plane')} className="flex items-center gap-2">
+                <Square className="w-4 h-4" />
+                Plane
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleAddNode('torus')} className="flex items-center gap-2">
+                <Circle className="w-4 h-4" />
+                Torus
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Connection Mode */}
           <Tooltip>
@@ -117,12 +167,29 @@ export function Toolbar() {
                 variant={connectionMode ? "default" : "outline"}
                 size="sm"
                 onClick={toggleConnectionMode}
+                disabled={movementMode}
               >
                 <Link className="w-4 h-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>
               <p>Connection Mode (C)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Movement Mode */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={movementMode ? "default" : "outline"}
+                size="sm"
+                onClick={toggleMovementMode}
+              >
+                <Move className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Movement Mode (M) - Free movement with Shift+Drag</p>
             </TooltipContent>
           </Tooltip>
 
