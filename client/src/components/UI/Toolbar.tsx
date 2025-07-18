@@ -19,11 +19,6 @@ import {
   Layers,
   Move,
   ChevronDown,
-  Sphere,
-  Box,
-  Cylinder,
-  Triangle,
-  Square,
   Circle
 } from "lucide-react";
 import { useAetherStore } from "../../stores/useAetherStore";
@@ -134,23 +129,23 @@ export function Toolbar() {
             </Tooltip>
             <DropdownMenuContent align="start" className="w-48">
               <DropdownMenuItem onClick={() => handleAddNode('sphere')} className="flex items-center gap-2">
-                <Sphere className="w-4 h-4" />
+                <Circle className="w-4 h-4" />
                 Sphere
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleAddNode('cube')} className="flex items-center gap-2">
-                <Box className="w-4 h-4" />
+                <Plus className="w-4 h-4" />
                 Cube
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleAddNode('cylinder')} className="flex items-center gap-2">
-                <Cylinder className="w-4 h-4" />
+                <Circle className="w-4 h-4" />
                 Cylinder
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleAddNode('cone')} className="flex items-center gap-2">
-                <Triangle className="w-4 h-4" />
+                <ChevronDown className="w-4 h-4" />
                 Cone
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleAddNode('plane')} className="flex items-center gap-2">
-                <Square className="w-4 h-4" />
+                <Grid3X3 className="w-4 h-4" />
                 Plane
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => handleAddNode('torus')} className="flex items-center gap-2">

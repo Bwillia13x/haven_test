@@ -1,7 +1,7 @@
 # Aether Weaver - Advanced 3D Modeling Tool
 
 ## Overview
-Aether Weaver is a sophisticated web-based 3D modeling and visualization tool built with React, Three.js, and modern web technologies. The application provides an intuitive interface for creating, manipulating, and connecting 3D nodes in a virtual space, with advanced features like AI-powered commands, multi-selection, undo/redo functionality, and real-time collaboration capabilities.
+Aether Weaver is a sophisticated web-based 3D modeling and visualization tool built with React, Three.js, and modern web technologies. The application provides an intuitive interface for creating, manipulating, and connecting 3D nodes in a virtual space, with advanced features like natural language commands, multi-selection, undo/redo functionality, and real-time collaboration capabilities.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -40,12 +40,12 @@ Preferred communication style: Simple, everyday language.
 #### User Interface
 - **Toolbar**: Primary action buttons for common operations
 - **Property Panel**: Real-time property editing for selected objects
-- **Command Input**: AI-powered natural language command processing
+- **Command Input**: Natural language command processing
 - **Context Menus**: Right-click contextual actions
 - **Notification System**: User feedback for operations and errors
 
-#### AI Command System
-- **Natural Language Processing**: Converts text commands into 3D operations
+#### Natural Language Command System
+- **Command Parsing**: Converts text commands into 3D operations
 - **Geometric Generation**: Create complex shapes, grids, spirals, and fractals
 - **Animation Commands**: Add rotation, pulsing, and other dynamic effects
 - **Material Commands**: Apply different visual styles and colors

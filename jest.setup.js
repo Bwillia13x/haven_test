@@ -1,5 +1,10 @@
 require('@testing-library/jest-dom');
 
+// Polyfill for TextEncoder/TextDecoder (needed for Node.js environment)
+const { TextEncoder, TextDecoder } = require('util');
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
 // Mock Three.js for testing
 global.THREE = {};
 

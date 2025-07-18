@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertProjectSchema, updateProjectSchema } from "@shared/schema";
+import { registerUser, authenticateUser, getUserById } from "./auth";
 import { z } from "zod";
 
 // Simple session interface for TypeScript
@@ -33,14 +34,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userData = insertUserSchema.parse(req.body);
 
-      // Check if user already exists
-      const existingUser = await storage.getUserByUsername(userData.username);
-      if (existingUser) {
-        return res.status(400).json({ message: "Username already exists" });
-      }
-
-      // Create user (in a real app, hash the password)
-      const user = await storage.createUser(userData);
+      // Register user with hashed password
+      const user = await registerUser(userData);
 
       // Set session
       req.session.userId = user.id;
@@ -48,11 +43,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(201).json({
         message: "User created successfully",
-        user: { id: user.id, username: user.username }
+        user
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      if (error instanceof Error && error.message === "Username already exists") {
+        return res.status(400).json({ message: error.message });
       }
       res.status(500).json({ message: "Internal server error" });
     }
@@ -67,10 +65,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Username and password required" });
       }
 
-      const user = await storage.getUserByUsername(username);
-      if (!user || user.password !== password) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
+      // Authenticate user with hashed password verification
+      const user = await authenticateUser(username, password);
 
       // Set session
       req.session.userId = user.id;
@@ -78,9 +74,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         message: "Login successful",
-        user: { id: user.id, username: user.username }
+        user
       });
     } catch (error) {
+      if (error instanceof Error && error.message === "Invalid credentials") {
+        return res.status(401).json({ message: error.message });
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -98,11 +97,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/me - Get current user info
   app.get("/api/me", requireAuth, async (req: Request, res: Response) => {
     try {
-      const user = await storage.getUser(req.session.userId!);
+      const user = await getUserById(req.session.userId!);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      res.json({ user: { id: user.id, username: user.username } });
+      res.json({ user });
     } catch (error) {
       res.status(500).json({ message: "Internal server error" });
     }

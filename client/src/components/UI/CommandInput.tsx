@@ -53,7 +53,7 @@ export function CommandInput() {
           <Input
             value={command}
             onChange={(e) => setCommand(e.target.value)}
-            placeholder="Enter AI command (e.g., 'create 5 nodes in a circle')"
+            placeholder="Enter command (e.g., 'create 5 nodes in a circle')"
             className="bg-gray-700 border-gray-600 text-white flex-1"
             autoFocus
           />

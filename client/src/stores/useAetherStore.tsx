@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
-import { AetherNode, AetherConnector, AetherSurface, Material, NotificationType, NodeGeometry, NodeProperties, SurfaceType } from "../types/aether";
-import { executeAICommand } from "../utils/aiCommands";
+import { AetherNode, AetherConnector, AetherSurface, Material, NotificationType, NodeGeometry, NodeProperties, SurfaceType, ConnectorType, ConnectorProperties, ConnectorStyle } from "../types/aether";
+import { executeCommand } from "../utils/commandParser";
 import { exportProjectToJSON } from "../utils/exportUtils";
+import * as THREE from 'three';
 
 interface Notification {
   id: string;
@@ -748,7 +749,7 @@ export const useAetherStore = create<AetherState>()(
       }
     },
 
-    addAdvancedConnector: (startNodeId, endNodeId, type = 'straight', properties = {}) => {
+    addAdvancedConnector: (startNodeId, endNodeId, type = 'straight' as ConnectorType, properties = {}) => {
       const state = get();
       const connectorId = `conn_${startNodeId}_${endNodeId}`;
 
@@ -769,7 +770,7 @@ export const useAetherStore = create<AetherState>()(
       if (!exists) {
         const defaultProperties: ConnectorProperties = {
           thickness: 1,
-          style: 'solid',
+          style: 'solid' as ConnectorStyle,
           segments: 16,
           ...properties
         };
@@ -927,8 +928,8 @@ export const useAetherStore = create<AetherState>()(
         ];
 
         const extrudedId = get().addAdvancedNode(node!.geometry || 'sphere', {
-          position: extrudedPos,
-          ...node!.properties
+          ...node!.properties,
+          position: extrudedPos
         }, node!.material);
 
         extrudedNodeIds.push(extrudedId);
@@ -966,8 +967,8 @@ export const useAetherStore = create<AetherState>()(
           const rotatedPos = originalPos.clone().applyMatrix4(rotationMatrix);
 
           const revolvedId = get().addAdvancedNode(node!.geometry || 'sphere', {
-            position: [rotatedPos.x, rotatedPos.y, rotatedPos.z],
-            ...node!.properties
+            ...node!.properties,
+            position: [rotatedPos.x, rotatedPos.y, rotatedPos.z]
           }, node!.material);
 
           allNodeIds.push(revolvedId);
@@ -1156,13 +1157,30 @@ export const useAetherStore = create<AetherState>()(
         const nodeIds: string[] = [];
 
         // Create nodes
-        result.nodes.forEach((nodeData, index) => {
+        result.nodes.forEach((nodeData: any, index: number) => {
           const id = `node_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${index}`;
           const newNode: AetherNode = {
             id,
             position: nodeData.position,
             material: nodeData.material || options.material || 'default',
-            scale: nodeData.scale || 1
+            scale: nodeData.scale || 1,
+            geometry: 'sphere',
+            properties: {
+              position: nodeData.position,
+              rotation: [0, 0, 0],
+              scale: [1, 1, 1],
+              radius: 0.15,
+              height: 0.3,
+              width: 0.3,
+              depth: 0.3,
+              segments: 16,
+              rings: 8,
+              visible: true,
+              castShadow: true,
+              receiveShadow: true,
+              wireframe: false
+            },
+            created: Date.now()
           };
 
           nodeIds.push(id);
@@ -1173,7 +1191,7 @@ export const useAetherStore = create<AetherState>()(
         });
 
         // Create connectors
-        result.connectors.forEach(connectorData => {
+        result.connectors.forEach((connectorData: any) => {
           const startNodeId = nodeIds[connectorData.startIndex];
           const endNodeId = nodeIds[connectorData.endIndex];
 
@@ -1181,9 +1199,14 @@ export const useAetherStore = create<AetherState>()(
             const connectorId = `conn_${startNodeId}_${endNodeId}`;
             const newConnector: AetherConnector = {
               id: connectorId,
+              type: 'straight' as ConnectorType,
               startNodeId,
               endNodeId,
               material: connectorData.material || 'default',
+              properties: {
+                thickness: connectorData.thickness || 1,
+                style: 'solid' as ConnectorStyle
+              },
               thickness: connectorData.thickness || 1
             };
 
@@ -1305,9 +1328,9 @@ export const useAetherStore = create<AetherState>()(
       set({ contextMenu: null });
     },
 
-    // AI Commands
+    // Natural Language Commands
     executeCommand: (command) => {
-      executeAICommand(command, get);
+      executeCommand(command, get);
     },
 
     // Export/Import

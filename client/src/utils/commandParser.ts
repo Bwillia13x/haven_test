@@ -1,6 +1,6 @@
 import { AetherNode } from "../types/aether";
 
-export function executeAICommand(commandString: string, get: () => any) {
+export function executeCommand(commandString: string, get: () => any) {
   const cmd = commandString.trim().toLowerCase();
   
   try {

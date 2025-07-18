@@ -9,8 +9,8 @@ Aether Weaver is a professional-grade 3D modeling tool built with React, Three.j
 - **3D Node/Connector Modeling Canvas**
   - Multi-select, drag, snap-to-grid, group, align, distribute
   - Advanced node/connector operations (duplicate, scale, rotate, align, etc.)
-- **AI Command System**
-  - Natural language commands for grid, spiral, fractal, symmetry, animation, material, etc.
+- **Natural Language Command Parser**
+  - Text-based commands for grid, spiral, fractal, symmetry, animation, material, etc.
 - **Material System**
   - Customizable materials, material editor, real-time preview
 - **Camera Controls**
@@ -58,7 +58,7 @@ npm run preview
 graph TD;
   UI["UI Components"] -->|Zustand| Store["Aether Store"]
   Store -->|State| Canvas["3D Canvas (Three.js)"]
-  Store -->|Actions| AI["AI Command System"]
+  Store -->|Actions| Commands["Command Parser"]
   Store -->|Actions| FileOps["Export/Import"]
   Store -->|Actions| Material["Material System"]
   Store -->|Actions| Camera["Camera Controls"]

@@ -10,11 +10,6 @@ import {
   Settings, 
   ChevronDown, 
   ChevronUp,
-  Sphere,
-  Box,
-  Cylinder,
-  Triangle,
-  Square,
   Circle
 } from "lucide-react";
 import { useAetherStore } from "../../stores/useAetherStore";
@@ -68,11 +63,11 @@ export function NodePropertiesPanel() {
   };
 
   const geometryIcons = {
-    sphere: Sphere,
-    cube: Box,
-    cylinder: Cylinder,
-    cone: Triangle,
-    plane: Square,
+    sphere: Circle,
+    cube: Settings,
+    cylinder: Circle,
+    cone: ChevronDown,
+    plane: Grid3X3,
     torus: Circle
   };
 
@@ -123,31 +118,31 @@ export function NodePropertiesPanel() {
             <SelectContent>
               <SelectItem value="sphere">
                 <div className="flex items-center gap-2">
-                  <Sphere className="w-4 h-4" />
+                  <Circle className="w-4 h-4" />
                   Sphere
                 </div>
               </SelectItem>
               <SelectItem value="cube">
                 <div className="flex items-center gap-2">
-                  <Box className="w-4 h-4" />
+                  <Settings className="w-4 h-4" />
                   Cube
                 </div>
               </SelectItem>
               <SelectItem value="cylinder">
                 <div className="flex items-center gap-2">
-                  <Cylinder className="w-4 h-4" />
+                  <Circle className="w-4 h-4" />
                   Cylinder
                 </div>
               </SelectItem>
               <SelectItem value="cone">
                 <div className="flex items-center gap-2">
-                  <Triangle className="w-4 h-4" />
+                  <ChevronDown className="w-4 h-4" />
                   Cone
                 </div>
               </SelectItem>
               <SelectItem value="plane">
                 <div className="flex items-center gap-2">
-                  <Square className="w-4 h-4" />
+                  <Grid3X3 className="w-4 h-4" />
                   Plane
                 </div>
               </SelectItem>
